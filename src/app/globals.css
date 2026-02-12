@@ -1,8 +1,12 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "tailwindcss";
 
-@custom-variant dark (&:is(.dark *));
+
+/* 手动切换暗黑模式 */
+@custom-variant dark (&:where(.dark, .dark *));
+
 
 @theme inline {
   --color-background: var(--background);
@@ -80,6 +84,8 @@
   --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
   --sidebar-border: oklch(0.92 0.004 286.32);
   --sidebar-ring: oklch(0.705 0.015 286.067);
+  --color-red-50: #fef2f2;
+  --color-red-100: #fee2e2;
 }
 
 .dark {
@@ -114,6 +120,8 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.552 0.016 285.938);
+  --color-red-50: #2e0e0e;
+  --color-red-100: #431313;
 }
 
 @layer base {
