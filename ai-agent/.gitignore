@@ -36,3 +36,6 @@ yarn-error.log*
 # Misc
 .DS_Store
 *.pem
+
+# Wrangler 运行时生成的临时文件
+apps/api/.wrangler/tmp/
