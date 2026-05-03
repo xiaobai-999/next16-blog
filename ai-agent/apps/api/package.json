@@ -17,6 +17,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:",
     "typescript": "catalog:",
-    "wrangler": "^4.4.0"
+    "wrangler": "^4.4.0",
+    "zod": "catalog:"
   }
 }
