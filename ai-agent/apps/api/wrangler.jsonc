@@ -3,5 +3,20 @@
   "name": "api",
   "main": "src/index.ts",
   "compatibility_date": "2025-04-29",
-  "compatibility_flags": ["nodejs_compat"]
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "APP_ENV": "development"
+  },
+  "env": {
+    "test": {
+      "vars": {
+        "APP_ENV": "test"
+      }
+    },
+    "production": {
+      "vars": {
+        "APP_ENV": "production"
+      }
+    }
+  }
 }

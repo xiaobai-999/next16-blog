@@ -1,13 +1,16 @@
 import { Card, CardContent } from '@repo/ui/card'
 import Link from 'next/link'
-import { getPingResponse, rpcPayload } from '../../../../src/api/system/ping.api'
+import {
+  orderDetailPayload,
+  postOrderDetail,
+} from '../../../../src/api/order/detail.api'
 
 export const dynamic = 'force-dynamic'
 
-export default async function VerifySystemPingPage() {
-  const pingResult = await getPingResponse()
-  const requestBody = JSON.stringify(rpcPayload, null, 2)
-  const responseBody = JSON.stringify(pingResult, null, 2)
+export default async function VerifyOrderDetailPage() {
+  const result = await postOrderDetail()
+  const requestBody = JSON.stringify(orderDetailPayload, null, 2)
+  const responseBody = JSON.stringify(result, null, 2)
 
   return (
     <main className="min-h-screen bg-surface-canvas px-6 text-content-primary">
@@ -21,18 +24,18 @@ export default async function VerifySystemPingPage() {
           <CardContent className="space-y-5 p-6">
             <div className="space-y-2">
               <p className="text-xs font-semibold tracking-[0.3em] text-content-tertiary uppercase">
-                System ping
+                Order detail
               </p>
               <h1 className="text-2xl font-semibold tracking-tight text-content-primary">
-                验证 Ping 接口
+                验证订单详情接口
               </h1>
             </div>
             <div className="flex flex-wrap gap-2 text-xs text-content-tertiary">
               <span className="rounded-full border border-border-default px-3 py-1">
-                POST /rpc/system/ping
+                POST /rpc/order/detail
               </span>
               <span className="rounded-full border border-border-default px-3 py-1">
-                {pingResult.ok ? 'ok=true' : `code=${pingResult.error.code}`}
+                {result.ok ? 'ok=true' : `code=${result.error.code}`}
               </span>
             </div>
             <div className="grid gap-4 lg:grid-cols-2">

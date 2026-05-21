@@ -14,6 +14,24 @@ const links = [
     path: '/rpc/system/ping',
     title: '验证 Ping 接口',
   },
+  {
+    href: '/verify/catalog/list',
+    method: 'GET',
+    path: '/rpc/catalog/list',
+    title: '验证目录列表接口',
+  },
+  {
+    href: '/verify/user/profile',
+    method: 'GET',
+    path: '/rpc/user/profile',
+    title: '验证用户资料接口',
+  },
+  {
+    href: '/verify/order/detail',
+    method: 'POST',
+    path: '/rpc/order/detail',
+    title: '验证订单详情接口',
+  },
 ]
 
 export default function Home() {
