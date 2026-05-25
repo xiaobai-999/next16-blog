@@ -1,0 +1,24 @@
+{
+  "name": "@ai-companion/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --local --port 8787",
+    "build": "wrangler deploy --dry-run",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "db:migrate:local": "wrangler d1 migrations apply ai-companion --local"
+  },
+  "dependencies": {
+    "@ai-companion/database": "workspace:*",
+    "@ai-companion/shared": "workspace:*",
+    "hono": "^4.6.16"
+  },
+  "devDependencies": {
+    "@ai-companion/config": "workspace:*",
+    "@cloudflare/workers-types": "^4.20241230.0",
+    "typescript": "^5.7.2",
+    "wrangler": "^3.99.0"
+  }
+}

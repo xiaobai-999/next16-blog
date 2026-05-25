@@ -1,0 +1,12 @@
+node_modules
+.turbo
+.playwright-mcp
+.next
+dist
+.wrangler
+.dev.vars
+.env
+.env.local
+*.log
+mvp-plan-course-aligned
+aicompanion.usehook.cn

@@ -1,0 +1,19 @@
+{
+  "name": "@ai-companion/database",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@ai-companion/config": "workspace:*",
+    "@cloudflare/workers-types": "^4.20241230.0",
+    "typescript": "^5.7.2"
+  }
+}

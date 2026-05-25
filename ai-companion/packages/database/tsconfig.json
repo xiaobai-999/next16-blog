@@ -1,0 +1,7 @@
+{
+  "extends": "@ai-companion/config/tsconfig/worker",
+  "compilerOptions": {
+    "baseUrl": "."
+  },
+  "include": ["src/**/*.ts"]
+}
