@@ -6,6 +6,7 @@ export type ApiErrorCode =
   | "BAD_REQUEST"
   | "UNAUTHORIZED"
   | "FORBIDDEN"
+  | "COMPANION_REQUIRED"
   | "NOT_FOUND"
   | "CONFLICT"
   | "INTERNAL_ERROR";

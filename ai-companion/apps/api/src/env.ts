@@ -1,7 +1,13 @@
 export type AppEnv = {
   Bindings: {
     DB: D1Database;
+    LLM_PROVIDER?: "openai" | "deepseek";
+    LLM_API_KEY?: string;
+    LLM_BASE_URL?: string;
     OPENAI_API_KEY?: string;
+    OPENAI_MODEL?: string;
+    DEEPSEEK_API_KEY?: string;
+    DEEPSEEK_MODEL?: string;
     JWT_SECRET?: string;
     COOKIE_SECRET?: string;
   };

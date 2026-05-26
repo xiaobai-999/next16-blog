@@ -1,3 +1,4 @@
-export const systemPrompt = "You are a supportive AI companion.";
-export const companionPrompt = "Respond in the configured companion persona and tone.";
+export { baseSystemPrompt, buildSystemPrompt } from "./system-prompt";
+export { buildPersonaPrompt, type PersonaPromptInput } from "./persona-prompt";
+
 export const memoryExtractionPrompt = "Extract durable user memories when explicitly supported.";

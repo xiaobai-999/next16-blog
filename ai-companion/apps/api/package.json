@@ -12,7 +12,10 @@
   },
   "dependencies": {
     "@ai-companion/database": "workspace:*",
+    "@ai-companion/prompts": "workspace:*",
     "@ai-companion/shared": "workspace:*",
+    "@ai-sdk/openai": "^2.0.0",
+    "ai": "^5.0.0",
     "hono": "^4.6.16"
   },
   "devDependencies": {

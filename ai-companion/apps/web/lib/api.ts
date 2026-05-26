@@ -16,7 +16,7 @@ import type {
   RegisterInput
 } from "@ai-companion/shared";
 
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8787";
+export const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8787";
 
 async function apiRequest<T>(path: string, init?: RequestInit) {
   const response = await fetch(`${apiBaseUrl}${path}`, {

@@ -5,3 +5,4 @@ export const API_AUTH_LOGIN_PATH = "/auth/login";
 export const API_AUTH_LOGOUT_PATH = "/auth/logout";
 export const API_ME_PATH = "/me";
 export const API_COMPANIONS_PATH = "/companions";
+export const API_CHAT_PATH = "/chat";

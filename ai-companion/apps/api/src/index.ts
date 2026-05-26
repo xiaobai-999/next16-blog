@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { authRoute } from "./routes/auth";
+import { chatRoute } from "./routes/chat";
 import { companionsRoute } from "./routes/companions";
 import { healthRoute } from "./routes/health";
 import { meRoute } from "./routes/me";
@@ -25,6 +26,7 @@ app.use(
 );
 
 app.route("/auth", authRoute);
+app.route("/chat", chatRoute);
 app.route("/companions", companionsRoute);
 app.route("/health", healthRoute);
 app.route("/me", meRoute);
