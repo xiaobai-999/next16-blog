@@ -1,6 +1,6 @@
 # AI Companion MVP 执行计划（小册 001-136 对齐版）
 
-本文档集用于把 AI Companion 第一版拆成 6 个可执行阶段，并对齐 `aicompanion.usehook.cn` 导出的 001-136 章内容。
+本文档集用于把 AI Companion 第一版拆成 7 个可执行阶段，并对齐 `aicompanion.usehook.cn` 导出的 001-136 章内容。
 
 第一版目标是验证：
 
@@ -58,6 +58,7 @@
 4. [阶段 4：消息持久化和上下文恢复](./04-message-persistence.md)
 5. [阶段 5：记忆提取和记忆管理](./05-memory-extraction-and-management.md)
 6. [阶段 6：日志、反馈和稳定性验收](./06-logs-feedback-stability.md)
+7. [阶段 7：V0 聊天体验优化](./07-v0-chat-experience-optimizations.md)
 
 ## 全局工程约定
 

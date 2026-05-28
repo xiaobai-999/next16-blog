@@ -4,6 +4,7 @@ import type { AppEnv } from "../env";
 import { buildChatContext } from "./context-builder";
 import {
   createConversation,
+  getLatestConversationForCompanion,
   requireConversation,
   titleFromMessage,
   touchConversation
@@ -109,12 +110,18 @@ export async function createChatStreamResponse(
     throw new ServiceError("BAD_REQUEST", "消息不能为空");
   }
 
-  const conversation = input.conversationId
-    ? await requireConversation(env.DB, userId, input.conversationId)
-    : await createConversation(env.DB, userId, {
-        companionId: companion.id,
-        title: titleFromMessage(userMessageContent)
-      });
+  const conversation =
+    input.conversationId !== undefined
+      ? await requireConversation(env.DB, userId, input.conversationId)
+      : ((await getLatestConversationForCompanion(env.DB, userId, companion.id)) ??
+        (await createConversation(env.DB, userId, {
+          companionId: companion.id,
+          title: titleFromMessage(userMessageContent)
+        })));
+
+  if (conversation.companionId !== companion.id) {
+    throw new ServiceError("FORBIDDEN", "无权访问该会话");
+  }
 
   const userMessage = await createMessage(env.DB, userId, {
     conversationId: conversation.id,

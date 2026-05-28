@@ -7,6 +7,7 @@ type ConversationRow = {
   user_id: string;
   companion_id: string;
   title: string | null;
+  last_message_preview?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -25,6 +26,7 @@ function mapConversation(row: ConversationRow): Conversation {
     userId: row.user_id,
     companionId: row.companion_id,
     title: row.title,
+    lastMessagePreview: row.last_message_preview ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -117,15 +119,53 @@ export async function createConversationForCurrentCompanion(
 export async function listConversations(db: D1Database, userId: string) {
   const result = await db
     .prepare(
-      `SELECT id, user_id, companion_id, title, created_at, updated_at
+      `SELECT
+         conversations.id,
+         conversations.user_id,
+         conversations.companion_id,
+         conversations.title,
+         conversations.created_at,
+         conversations.updated_at,
+         (
+           SELECT messages.content
+           FROM messages
+           WHERE messages.conversation_id = conversations.id
+             AND messages.user_id = conversations.user_id
+           ORDER BY messages.created_at DESC, messages.id DESC
+           LIMIT 1
+         ) AS last_message_preview
        FROM conversations
-       WHERE user_id = ?
-       ORDER BY updated_at DESC`
+       WHERE conversations.user_id = ?
+       ORDER BY conversations.updated_at DESC`
     )
     .bind(userId)
     .all<ConversationRow>();
 
   return result.results.map(mapConversation);
+}
+
+/**
+ * 查询当前用户某个伴侣下最近一条会话。
+ *
+ * 用于单一连续聊天模式：当前端没有传 conversationId 时，优先延续最近会话。
+ */
+export async function getLatestConversationForCompanion(
+  db: D1Database,
+  userId: string,
+  companionId: string
+) {
+  const row = await db
+    .prepare(
+      `SELECT id, user_id, companion_id, title, created_at, updated_at
+       FROM conversations
+       WHERE user_id = ? AND companion_id = ?
+       ORDER BY updated_at DESC
+       LIMIT 1`
+    )
+    .bind(userId, companionId)
+    .first<ConversationRow>();
+
+  return row ? mapConversation(row) : null;
 }
 
 /**

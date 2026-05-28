@@ -1,58 +1,41 @@
-import { API_HEALTH_PATH, APP_NAME } from "@ai-companion/shared";
-import type { HealthResponse } from "@ai-companion/shared";
-import Link from "next/link";
+"use client";
 
-async function getApiHealth(): Promise<HealthResponse | null> {
-  const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
+import { getMe, listCompanions } from "../lib/api";
 
-  if (!apiBaseUrl) {
-    return null;
-  }
+/**
+ * 根页面入口。
+ *
+ * 未登录用户进入登录页；已登录用户根据是否已有伴侣进入创建页或聊天页。
+ */
+export default function HomePage() {
+  const router = useRouter();
 
-  try {
-    const response = await fetch(`${apiBaseUrl}${API_HEALTH_PATH}`, {
-      cache: "no-store"
-    });
+  useEffect(() => {
+    /**
+     * 检查当前用户状态并跳转到实际工作流页面。
+     */
+    async function redirectBySession() {
+      try {
+        await getMe();
 
-    if (!response.ok) {
-      return null;
+        // companions：当前用户的伴侣列表，第一版只需要判断是否已完成伴侣创建。
+        const { companions } = await listCompanions();
+
+        router.replace(companions.length > 0 ? "/chat" : "/companion/setup");
+      } catch {
+        router.replace("/login");
+      }
     }
 
-    return (await response.json()) as HealthResponse;
-  } catch {
-    return null;
-  }
-}
-
-export default async function HomePage() {
-  const health = await getApiHealth();
+    void redirectBySession();
+  }, [router]);
 
   return (
     <main className="shell">
-      <section className="panel" aria-labelledby="page-title">
-        <p className="eyebrow">MVP workspace</p>
-        <h1 id="page-title">{APP_NAME}</h1>
-        <p className="summary">
-          Web and Worker API skeletons are wired through shared package contracts.
-        </p>
-        <dl className="status-grid">
-          <div>
-            <dt>API</dt>
-            <dd>{health?.ok ? "healthy" : "not connected"}</dd>
-          </div>
-          <div>
-            <dt>Health route</dt>
-            <dd>{API_HEALTH_PATH}</dd>
-          </div>
-        </dl>
-        <div className="action-row">
-          <Link className="button-link" href="/login">
-            登录
-          </Link>
-          <Link className="button-link secondary-link" href="/register">
-            注册
-          </Link>
-        </div>
+      <section className="panel" aria-live="polite">
+        <p className="summary">正在进入...</p>
       </section>
     </main>
   );

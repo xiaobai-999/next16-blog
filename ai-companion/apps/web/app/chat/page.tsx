@@ -3,10 +3,9 @@
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { API_CHAT_PATH } from "@ai-companion/shared";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import type { Companion, Conversation, FeedbackRating, Message, User } from "@ai-companion/shared";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { Companion, FeedbackRating, Message } from "@ai-companion/shared";
 import {
   apiBaseUrl,
   getMe,
@@ -45,13 +44,9 @@ function MessageText({ message }: { message: UIMessage }) {
 
 export default function ChatPage() {
   const router = useRouter();
-  // user：当前登录用户，用于显示登录状态。
-  const [user, setUser] = useState<User | null>(null);
   // companion：当前用户的默认伴侣，聊天页标题和 prompt 均依赖它。
   const [companion, setCompanion] = useState<Companion | null>(null);
-  // conversations：当前用户的会话列表，按后端 updatedAt 倒序返回。
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  // conversationId：当前选中的会话 ID；为空时首条消息会让后端自动创建会话。
+  // conversationId：当前连续聊天会话 ID；为空时后端会复用或创建当前伴侣的持续会话。
   const [conversationId, setConversationId] = useState<string | null>(null);
   // isLoadingHistory：历史消息加载状态，用于禁用发送和切换会话。
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
@@ -61,14 +56,31 @@ export default function ChatPage() {
   const [feedbackByMessage, setFeedbackByMessage] = useState<Record<string, FeedbackRating>>({});
   // pendingFeedbackMessageId：正在提交反馈的消息 ID，用于禁用重复点击。
   const [pendingFeedbackMessageId, setPendingFeedbackMessageId] = useState<string | null>(null);
+  // openFeedbackMessageId：当前打开消息操作菜单的 assistant 消息 ID。
+  const [openFeedbackMessageId, setOpenFeedbackMessageId] = useState<string | null>(null);
   // feedbackError：反馈提交失败时的轻量提示。
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  // responseConversationIdRef：保存本次流式响应头里的会话 ID，避免依赖会话列表最新项。
+  const responseConversationIdRef = useRef<string | null>(null);
   // transport：AI SDK 聊天传输层，负责把当前 conversationId 带给后端。
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
         api: `${apiBaseUrl}${API_CHAT_PATH}`,
         credentials: "include",
+        async fetch(input, init) {
+          // response：保留原始流式响应，同时读取后端透传的会话 ID。
+          const response = await globalThis.fetch(input, init);
+          // nextConversationId：后端确认的当前会话 ID，首次新会话创建后用于前端稳定续写。
+          const nextConversationId = response.headers.get("X-Conversation-Id");
+
+          if (nextConversationId) {
+            responseConversationIdRef.current = nextConversationId;
+            setConversationId(nextConversationId);
+          }
+
+          return response;
+        },
         prepareSendMessagesRequest({ messages }) {
           return {
             body: {
@@ -80,7 +92,7 @@ export default function ChatPage() {
       }),
     [conversationId]
   );
-  const { error, messages, regenerate, sendMessage, setMessages, status } = useChat({
+  const { error, messages, sendMessage, setMessages, status } = useChat({
     transport,
     onFinish() {
       void refreshCurrentConversation();
@@ -88,10 +100,6 @@ export default function ChatPage() {
   });
   // isSending：AI SDK 当前是否正在提交或接收流式回复。
   const isSending = status === "submitted" || status === "streaming";
-  // currentConversation：当前选中的会话对象，用于展示标题。
-  const currentConversation = conversations.find(
-    (conversation) => conversation.id === conversationId
-  );
 
   const loadConversationMessages = useCallback(
     async (id: string) => {
@@ -111,15 +119,14 @@ export default function ChatPage() {
   /**
    * 刷新会话列表和当前会话消息。
    *
-   * 新会话在首次发送消息后由后端创建，因此流结束后需要重新读取会话列表。
+   * 新会话在首次发送消息后由后端创建，优先使用响应头返回的会话 ID。
    */
   async function refreshCurrentConversation() {
-    // latestConversations：保存消息后最新的会话列表，通常第一项是刚更新的会话。
+    // latestConversations：后端保存后的会话列表，用于在缺少响应头时兜底定位当前会话。
     const { conversations: latestConversations } = await listConversations();
-    // nextConversationId：当前会话优先；首次聊天时使用后端刚创建的最新会话。
-    const nextConversationId = conversationId ?? latestConversations[0]?.id ?? null;
-
-    setConversations(latestConversations);
+    // nextConversationId：优先使用当前状态，其次使用本次响应头里的会话 ID。
+    const nextConversationId =
+      conversationId ?? responseConversationIdRef.current ?? latestConversations[0]?.id ?? null;
 
     if (nextConversationId) {
       setConversationId(nextConversationId);
@@ -135,8 +142,7 @@ export default function ChatPage() {
      */
     async function checkAccess() {
       try {
-        // me：当前登录用户信息。
-        const me = await getMe();
+        await getMe();
         // companions：当前用户创建的伴侣列表，第一版只使用第一项。
         const { companions } = await listCompanions();
 
@@ -145,13 +151,10 @@ export default function ChatPage() {
           return;
         }
 
-        setUser(me.user);
         setCompanion(companions[0]);
 
         // existingConversations：当前用户已有会话，进入页面时默认恢复最近一条。
         const { conversations: existingConversations } = await listConversations();
-
-        setConversations(existingConversations);
 
         if (existingConversations[0]) {
           setConversationId(existingConversations[0].id);
@@ -165,18 +168,6 @@ export default function ChatPage() {
     void checkAccess();
   }, [loadConversationMessages, router]);
 
-  /**
-   * 切换当前会话并加载对应历史消息。
-   */
-  async function onSelectConversation(id: string) {
-    if (id === conversationId || isSending) {
-      return;
-    }
-
-    setConversationId(id);
-    await loadConversationMessages(id);
-  }
-
   async function onLogout() {
     await logout().catch(() => undefined);
     router.replace("/login");
@@ -187,16 +178,17 @@ export default function ChatPage() {
    *
    * 反馈只绑定数据库中的 assistant 消息；流式回复未结束时先禁用按钮，避免提交临时消息 ID。
    */
-  async function onFeedback(messageId: string, rating: FeedbackRating) {
+  async function onFeedback(messageId: string, rating: FeedbackRating, reason?: string) {
     setPendingFeedbackMessageId(messageId);
     setFeedbackError(null);
 
     try {
-      await submitFeedback({ messageId, rating });
+      await submitFeedback({ messageId, rating, reason });
       setFeedbackByMessage((current) => ({
         ...current,
         [messageId]: rating
       }));
+      setOpenFeedbackMessageId(null);
     } catch (error) {
       setFeedbackError(error instanceof Error ? error.message : "反馈提交失败");
     } finally {
@@ -225,42 +217,18 @@ export default function ChatPage() {
 
   return (
     <main className="chat-shell">
-      <aside className="conversation-sidebar" aria-label="会话列表">
-        <div className="sidebar-title">会话</div>
-        <div className="conversation-items">
-          {conversations.map((conversation) => (
-            <button
-              className={`conversation-item ${conversation.id === conversationId ? "active" : ""}`}
-              disabled={isSending || isLoadingHistory}
-              key={conversation.id}
-              onClick={() => void onSelectConversation(conversation.id)}
-              type="button"
-            >
-              {conversation.title || "新会话"}
-            </button>
-          ))}
-        </div>
-      </aside>
       <section className="chat-panel">
         <div className="toolbar">
           <div>
-            <p className="eyebrow">Chat</p>
             <h1>{companion?.name ?? "聊天"}</h1>
+            <p className="chat-presence">{isSending ? "正在回复" : "在线"}</p>
           </div>
           <div className="action-row compact-actions">
-            <Link className="button-link secondary-link" href="/memories">
-              记忆
-            </Link>
             <button className="secondary-button" type="button" onClick={onLogout}>
               退出
             </button>
           </div>
         </div>
-        <p className="summary">
-          {user ? `${user.email} 已登录` : "读取中"}
-          {companion ? `，${companion.relationship}` : ""}
-          {currentConversation ? `，${currentConversation.title || "新会话"}` : ""}
-        </p>
         <div className="message-list" aria-live="polite">
           {isLoadingHistory ? (
             <div className="empty-chat">
@@ -273,30 +241,61 @@ export default function ChatPage() {
           ) : (
             messages.map((message) => (
               <div className={`message-row ${message.role}`} key={message.id}>
-                <div className="message-bubble">
-                  <MessageText message={message} />
+                <div className="message-bubble-wrap">
+                  <div className="message-bubble">
+                    <MessageText message={message} />
+                  </div>
                   {message.role === "assistant" ? (
-                    <div className="message-actions" aria-label="AI 回复反馈">
+                    <div className="message-actions">
                       <button
-                        className={`feedback-button ${
-                          feedbackByMessage[message.id] === "up" ? "active" : ""
+                        aria-expanded={openFeedbackMessageId === message.id}
+                        aria-label="消息操作"
+                        className={`message-menu-trigger ${
+                          openFeedbackMessageId === message.id ? "open" : ""
                         }`}
                         disabled={isSending || pendingFeedbackMessageId === message.id}
-                        onClick={() => void onFeedback(message.id, "up")}
+                        onClick={() =>
+                          setOpenFeedbackMessageId((current) =>
+                            current === message.id ? null : message.id
+                          )
+                        }
                         type="button"
                       >
-                        有帮助
+                        ...
                       </button>
-                      <button
-                        className={`feedback-button ${
-                          feedbackByMessage[message.id] === "down" ? "active" : ""
+                      <div
+                        className={`message-action-menu ${
+                          openFeedbackMessageId === message.id ? "open" : ""
                         }`}
-                        disabled={isSending || pendingFeedbackMessageId === message.id}
-                        onClick={() => void onFeedback(message.id, "down")}
-                        type="button"
+                        role="menu"
                       >
-                        没帮助
-                      </button>
+                        <button
+                          disabled={pendingFeedbackMessageId === message.id}
+                          onClick={() => void onFeedback(message.id, "up")}
+                          type="button"
+                        >
+                          喜欢
+                        </button>
+                        <button
+                          disabled={pendingFeedbackMessageId === message.id}
+                          onClick={() => void onFeedback(message.id, "down", "[memory_error]")}
+                          type="button"
+                        >
+                          记错了
+                        </button>
+                        <button
+                          disabled={pendingFeedbackMessageId === message.id}
+                          onClick={() =>
+                            void onFeedback(message.id, "down", "[persona_mismatch]")
+                          }
+                          type="button"
+                        >
+                          不太像你
+                        </button>
+                      </div>
+                      {feedbackByMessage[message.id] ? (
+                        <p className="feedback-saved">已记录</p>
+                      ) : null}
                     </div>
                   ) : null}
                 </div>
@@ -308,9 +307,6 @@ export default function ChatPage() {
         {error ? (
           <div className="chat-error">
             <span>发送失败，请稍后再试。</span>
-            <button className="secondary-button" type="button" onClick={() => void regenerate()}>
-              重试
-            </button>
           </div>
         ) : null}
         <form className="chat-input-row" onSubmit={onSubmit}>

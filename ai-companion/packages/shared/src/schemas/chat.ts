@@ -30,6 +30,7 @@ export const conversationSchema = z.object({
   userId: z.string(),
   companionId: z.string(),
   title: z.string().nullable(),
+  lastMessagePreview: z.string().nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string()
 });

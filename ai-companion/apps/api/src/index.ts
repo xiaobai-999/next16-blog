@@ -26,6 +26,7 @@ app.use(
     },
     allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allowHeaders: ["Content-Type"],
+    exposeHeaders: ["X-Conversation-Id", "X-Trace-Id"],
     credentials: true
   })
 );
