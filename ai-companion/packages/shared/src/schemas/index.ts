@@ -4,3 +4,4 @@ export * from "./common";
 export * from "./companion";
 export * from "./feedback";
 export * from "./memory";
+export * from "./model-log";

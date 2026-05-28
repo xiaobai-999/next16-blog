@@ -4,6 +4,8 @@ import {
   API_AUTH_REGISTER_PATH,
   API_COMPANIONS_PATH,
   API_CONVERSATIONS_PATH,
+  API_FEEDBACK_PATH,
+  API_MEMORIES_PATH,
   API_ME_PATH,
   type ApiErrorResponse
 } from "@ai-companion/shared";
@@ -14,8 +16,13 @@ import type {
   ConversationResponse,
   ConversationsResponse,
   CreateCompanionInput,
+  CreateFeedbackInput,
+  CreateMemoryInput,
+  FeedbackResponse,
   LoginInput,
   MeResponse,
+  MemoriesResponse,
+  MemoryResponse,
   MessagesResponse,
   RegisterInput
 } from "@ai-companion/shared";
@@ -124,4 +131,40 @@ export function createConversation() {
  */
 export function listMessages(conversationId: string) {
   return apiRequest<MessagesResponse>(`${API_CONVERSATIONS_PATH}/${conversationId}/messages`);
+}
+
+/**
+ * 获取当前用户的长期记忆列表。
+ */
+export function listMemories() {
+  return apiRequest<MemoriesResponse>(API_MEMORIES_PATH);
+}
+
+/**
+ * 手动新增一条长期记忆。
+ */
+export function createMemory(input: CreateMemoryInput) {
+  return apiRequest<MemoryResponse>(API_MEMORIES_PATH, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+/**
+ * 删除指定长期记忆。
+ */
+export function deleteMemory(id: string) {
+  return apiRequest<{ ok: true }>(`${API_MEMORIES_PATH}/${id}`, {
+    method: "DELETE"
+  });
+}
+
+/**
+ * 提交当前用户对某条 assistant 回复的反馈。
+ */
+export function submitFeedback(input: CreateFeedbackInput) {
+  return apiRequest<FeedbackResponse>(API_FEEDBACK_PATH, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
 }

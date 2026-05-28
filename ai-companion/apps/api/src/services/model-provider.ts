@@ -7,6 +7,30 @@ const DEFAULT_CHAT_MODEL = "gpt-4o-mini";
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
 const DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash";
 
+export type ModelProviderInfo = {
+  provider: "openai" | "deepseek";
+  model: string;
+};
+
+/**
+ * 解析当前请求实际使用的模型供应商和模型名。
+ */
+export function getModelProviderInfo(env: AppEnv["Bindings"]): ModelProviderInfo {
+  const provider = env.LLM_PROVIDER ?? (env.DEEPSEEK_API_KEY ? "deepseek" : "openai");
+
+  if (provider === "deepseek") {
+    return {
+      provider,
+      model: env.DEEPSEEK_MODEL ?? DEFAULT_DEEPSEEK_MODEL
+    };
+  }
+
+  return {
+    provider,
+    model: env.OPENAI_MODEL ?? DEFAULT_CHAT_MODEL
+  };
+}
+
 function createDeepSeekFetch(): typeof fetch {
   return async (input, init) => {
     if (typeof init?.body === "string") {
@@ -33,7 +57,7 @@ function createDeepSeekFetch(): typeof fetch {
 }
 
 export function getChatModel(env: AppEnv["Bindings"]): LanguageModel {
-  const provider = env.LLM_PROVIDER ?? (env.DEEPSEEK_API_KEY ? "deepseek" : "openai");
+  const { provider, model } = getModelProviderInfo(env);
 
   if (provider === "deepseek") {
     const apiKey = env.DEEPSEEK_API_KEY ?? env.LLM_API_KEY;
@@ -48,7 +72,7 @@ export function getChatModel(env: AppEnv["Bindings"]): LanguageModel {
       fetch: createDeepSeekFetch()
     });
 
-    return deepseek.chat(env.DEEPSEEK_MODEL ?? DEFAULT_DEEPSEEK_MODEL);
+    return deepseek.chat(model);
   }
 
   const apiKey = env.OPENAI_API_KEY ?? env.LLM_API_KEY;
@@ -62,5 +86,5 @@ export function getChatModel(env: AppEnv["Bindings"]): LanguageModel {
     baseURL: env.LLM_BASE_URL
   });
 
-  return openai(env.OPENAI_MODEL ?? DEFAULT_CHAT_MODEL);
+  return openai(model);
 }

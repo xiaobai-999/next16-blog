@@ -144,6 +144,25 @@ export async function listMessages(db: D1Database, userId: string, conversationI
 }
 
 /**
+ * 查询当前用户的一条消息。
+ *
+ * 用于反馈接口校验消息归属和消息角色。
+ */
+export async function getMessage(db: D1Database, userId: string, id: string) {
+  const row = await db
+    .prepare(
+      `SELECT id, user_id, conversation_id, role, content, token_count, created_at
+       FROM messages
+       WHERE id = ? AND user_id = ?
+       LIMIT 1`
+    )
+    .bind(id, userId)
+    .first<MessageRow>();
+
+  return row ? mapMessage(row) : null;
+}
+
+/**
  * 查询最近一段可注入模型的聊天历史。
  *
  * SQL 先按倒序取最近 limit 条，再在内存中反转为时间正序，符合模型消息输入顺序。

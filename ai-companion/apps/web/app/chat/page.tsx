@@ -3,16 +3,18 @@
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { API_CHAT_PATH } from "@ai-companion/shared";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import type { Companion, Conversation, Message, User } from "@ai-companion/shared";
+import type { Companion, Conversation, FeedbackRating, Message, User } from "@ai-companion/shared";
 import {
   apiBaseUrl,
   getMe,
   listCompanions,
   listConversations,
   listMessages as listConversationMessages,
-  logout
+  logout,
+  submitFeedback
 } from "../../lib/api";
 
 /**
@@ -55,6 +57,12 @@ export default function ChatPage() {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   // input：消息输入框内容。
   const [input, setInput] = useState("");
+  // feedbackByMessage：当前页面已提交的消息反馈，按消息 ID 保存点赞/点踩状态。
+  const [feedbackByMessage, setFeedbackByMessage] = useState<Record<string, FeedbackRating>>({});
+  // pendingFeedbackMessageId：正在提交反馈的消息 ID，用于禁用重复点击。
+  const [pendingFeedbackMessageId, setPendingFeedbackMessageId] = useState<string | null>(null);
+  // feedbackError：反馈提交失败时的轻量提示。
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
   // transport：AI SDK 聊天传输层，负责把当前 conversationId 带给后端。
   const transport = useMemo(
     () =>
@@ -175,6 +183,28 @@ export default function ChatPage() {
   }
 
   /**
+   * 提交 assistant 消息反馈。
+   *
+   * 反馈只绑定数据库中的 assistant 消息；流式回复未结束时先禁用按钮，避免提交临时消息 ID。
+   */
+  async function onFeedback(messageId: string, rating: FeedbackRating) {
+    setPendingFeedbackMessageId(messageId);
+    setFeedbackError(null);
+
+    try {
+      await submitFeedback({ messageId, rating });
+      setFeedbackByMessage((current) => ({
+        ...current,
+        [messageId]: rating
+      }));
+    } catch (error) {
+      setFeedbackError(error instanceof Error ? error.message : "反馈提交失败");
+    } finally {
+      setPendingFeedbackMessageId(null);
+    }
+  }
+
+  /**
    * 提交用户输入。
    *
    * 实际消息保存、会话创建和模型调用由后端 /chat 统一完成。
@@ -217,9 +247,14 @@ export default function ChatPage() {
             <p className="eyebrow">Chat</p>
             <h1>{companion?.name ?? "聊天"}</h1>
           </div>
-          <button className="secondary-button" type="button" onClick={onLogout}>
-            退出
-          </button>
+          <div className="action-row compact-actions">
+            <Link className="button-link secondary-link" href="/memories">
+              记忆
+            </Link>
+            <button className="secondary-button" type="button" onClick={onLogout}>
+              退出
+            </button>
+          </div>
         </div>
         <p className="summary">
           {user ? `${user.email} 已登录` : "读取中"}
@@ -240,11 +275,36 @@ export default function ChatPage() {
               <div className={`message-row ${message.role}`} key={message.id}>
                 <div className="message-bubble">
                   <MessageText message={message} />
+                  {message.role === "assistant" ? (
+                    <div className="message-actions" aria-label="AI 回复反馈">
+                      <button
+                        className={`feedback-button ${
+                          feedbackByMessage[message.id] === "up" ? "active" : ""
+                        }`}
+                        disabled={isSending || pendingFeedbackMessageId === message.id}
+                        onClick={() => void onFeedback(message.id, "up")}
+                        type="button"
+                      >
+                        有帮助
+                      </button>
+                      <button
+                        className={`feedback-button ${
+                          feedbackByMessage[message.id] === "down" ? "active" : ""
+                        }`}
+                        disabled={isSending || pendingFeedbackMessageId === message.id}
+                        onClick={() => void onFeedback(message.id, "down")}
+                        type="button"
+                      >
+                        没帮助
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             ))
           )}
         </div>
+        {feedbackError ? <p className="feedback-error">{feedbackError}</p> : null}
         {error ? (
           <div className="chat-error">
             <span>发送失败，请稍后再试。</span>

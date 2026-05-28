@@ -8,8 +8,10 @@ import {
   titleFromMessage,
   touchConversation
 } from "./conversations";
+import { extractAndStoreMemories } from "./memory-extractor";
 import { createMessage, listRecentModelMessages, uiMessageContent } from "./messages";
-import { getChatModel } from "./model-provider";
+import { createModelLog } from "./model-logs";
+import { getChatModel, getModelProviderInfo } from "./model-provider";
 import { ServiceError } from "./service-error";
 
 /**
@@ -64,6 +66,23 @@ function latestUserMessageText(input: ChatRequest) {
 }
 
 /**
+ * 提取可写入日志的错误摘要。
+ */
+function errorSummary(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      code: error.name || "Error",
+      message: error.message.slice(0, 500)
+    };
+  }
+
+  return {
+    code: "UnknownError",
+    message: String(error).slice(0, 500)
+  };
+}
+
+/**
  * 创建聊天流式响应，并在生成前后完成消息持久化。
  *
  * 流程：
@@ -76,7 +95,9 @@ function latestUserMessageText(input: ChatRequest) {
 export async function createChatStreamResponse(
   env: AppEnv["Bindings"],
   userId: string,
-  input: ChatRequest
+  input: ChatRequest,
+  traceId: string,
+  waitUntil?: (promise: Promise<unknown>) => void
 ) {
   // companion：当前用户的伴侣配置，用于新会话归属和 prompt 构建。
   // systemPrompt：由伴侣配置生成的系统提示词，不保存到消息列表。
@@ -95,7 +116,7 @@ export async function createChatStreamResponse(
         title: titleFromMessage(userMessageContent)
       });
 
-  await createMessage(env.DB, userId, {
+  const userMessage = await createMessage(env.DB, userId, {
     conversationId: conversation.id,
     role: "user",
     content: userMessageContent
@@ -107,17 +128,79 @@ export async function createChatStreamResponse(
   // originalMessages：AI SDK UIMessage 持久化模式需要的原始前端消息列表。
   const originalMessages =
     input.messages?.every(hasUiParts) === true ? (input.messages as UIMessage[]) : undefined;
+  // modelInfo：当前聊天调用实际使用的模型供应商和模型名，用于日志定位。
+  const modelInfo = getModelProviderInfo(env);
+  // modelStartedAt：模型流式调用开始时间，用于计算端到端耗时。
+  const modelStartedAt = Date.now();
+  let model: ReturnType<typeof getChatModel>;
+
+  try {
+    model = getChatModel(env);
+  } catch (error) {
+    const summary = errorSummary(error);
+
+    await createModelLog(env.DB, {
+      traceId,
+      userId,
+      conversationId: conversation.id,
+      provider: modelInfo.provider,
+      model: modelInfo.model,
+      latencyMs: Date.now() - modelStartedAt,
+      status: "error",
+      errorCode: summary.code,
+      errorMessage: summary.message
+    }).catch((logError) => {
+      console.error("Failed to write model log", { traceId, error: logError });
+    });
+
+    throw error;
+  }
 
   const result = streamText({
-    model: getChatModel(env),
+    model,
     system: systemPrompt,
     messages,
-    temperature: 0.7
+    temperature: 0.7,
+    async onFinish(event) {
+      try {
+        await createModelLog(env.DB, {
+          traceId,
+          userId,
+          conversationId: conversation.id,
+          provider: modelInfo.provider,
+          model: modelInfo.model,
+          promptTokens: event.totalUsage.inputTokens ?? null,
+          completionTokens: event.totalUsage.outputTokens ?? null,
+          latencyMs: Date.now() - modelStartedAt,
+          status: "success"
+        });
+      } catch (error) {
+        console.error("Failed to write model log", { traceId, error });
+      }
+    },
+    onError(event) {
+      const summary = errorSummary(event.error);
+
+      void createModelLog(env.DB, {
+        traceId,
+        userId,
+        conversationId: conversation.id,
+        provider: modelInfo.provider,
+        model: modelInfo.model,
+        latencyMs: Date.now() - modelStartedAt,
+        status: "error",
+        errorCode: summary.code,
+        errorMessage: summary.message
+      }).catch((error) => {
+        console.error("Failed to write model log", { traceId, error });
+      });
+    }
   });
 
   return result.toUIMessageStreamResponse({
     headers: {
-      "X-Conversation-Id": conversation.id
+      "X-Conversation-Id": conversation.id,
+      "X-Trace-Id": traceId
     },
     originalMessages,
     async onFinish(event) {
@@ -133,14 +216,32 @@ export async function createChatStreamResponse(
       }
 
       try {
-        await createMessage(env.DB, userId, {
+        const assistantMessage = await createMessage(env.DB, userId, {
           conversationId: conversation.id,
           role: "assistant",
           content: assistantContent
         });
         await touchConversation(env.DB, userId, conversation.id);
+
+        const memoryExtraction = extractAndStoreMemories(env, {
+          traceId,
+          userId,
+          conversationId: conversation.id,
+          companionId: conversation.companionId,
+          sourceMessageId: userMessage.id,
+          userMessage: userMessage.content,
+          assistantMessage: assistantMessage.content
+        }).catch((error) => {
+          console.error("Failed to extract memories", { traceId, error });
+        });
+
+        if (waitUntil) {
+          waitUntil(memoryExtraction);
+        } else {
+          void memoryExtraction;
+        }
       } catch (error) {
-        console.error("Failed to persist assistant message", error);
+        console.error("Failed to persist assistant message", { traceId, error });
       }
     },
     onError() {

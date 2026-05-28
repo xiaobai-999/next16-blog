@@ -99,6 +99,10 @@ dd {
   margin-top: 24px;
 }
 
+.compact-actions {
+  margin-top: 0;
+}
+
 .button-link,
 button {
   min-height: 42px;
@@ -150,6 +154,7 @@ label {
 }
 
 input,
+select,
 textarea {
   width: 100%;
   border: 1px solid #cdd5df;
@@ -303,6 +308,38 @@ textarea {
   color: #ffffff;
 }
 
+.message-actions {
+  border-top: 1px solid #e3e8ef;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 8px;
+  white-space: normal;
+}
+
+.feedback-button {
+  min-height: 30px;
+  border-color: #cdd5df;
+  background: #ffffff;
+  color: #344054;
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 0 10px;
+}
+
+.feedback-button.active {
+  border-color: #175cd3;
+  background: #eff6ff;
+  color: #175cd3;
+}
+
+.feedback-error {
+  margin: 0 0 12px;
+  color: #b42318;
+  font-size: 0.9rem;
+}
+
 .chat-error {
   border: 1px solid #fecdca;
   border-radius: 6px;
@@ -324,6 +361,82 @@ textarea {
 
 .chat-input-row textarea {
   min-height: 64px;
+}
+
+.memory-shell {
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.memory-layout {
+  width: min(1120px, 100%);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 16px;
+  margin: 0 auto;
+}
+
+.memory-main,
+.memory-form {
+  border: 1px solid #d7dde5;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 24px;
+}
+
+.memory-form {
+  align-self: start;
+  display: grid;
+  gap: 16px;
+}
+
+.memory-form h2,
+.memory-section h2 {
+  margin: 0;
+  color: #101828;
+  font-size: 1.05rem;
+  line-height: 1.3;
+}
+
+.memory-groups {
+  display: grid;
+  gap: 16px;
+}
+
+.memory-section {
+  border-top: 1px solid #e3e8ef;
+  display: grid;
+  gap: 12px;
+  padding-top: 16px;
+}
+
+.memory-list {
+  display: grid;
+  gap: 10px;
+}
+
+.memory-item {
+  border: 1px solid #e3e8ef;
+  border-radius: 8px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  padding: 12px;
+}
+
+.memory-item p {
+  margin: 0 0 6px;
+  line-height: 1.6;
+}
+
+.memory-item span,
+.empty-memory {
+  color: #667085;
+  font-size: 0.9rem;
+}
+
+.empty-memory {
+  margin: 0;
 }
 
 @media (max-width: 520px) {
@@ -369,6 +482,23 @@ textarea {
   }
 
   .chat-input-row {
+    grid-template-columns: 1fr;
+  }
+
+  .memory-shell {
+    padding: 12px;
+  }
+
+  .memory-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .memory-main,
+  .memory-form {
+    padding: 16px;
+  }
+
+  .memory-item {
     grid-template-columns: 1fr;
   }
 }
