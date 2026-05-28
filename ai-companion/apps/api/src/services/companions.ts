@@ -12,6 +12,9 @@ type CompanionRow = {
   updated_at: string;
 };
 
+/**
+ * 将 D1 的 snake_case 伴侣行转换成共享 Companion 类型。
+ */
 function mapCompanion(row: CompanionRow): Companion {
   return {
     id: row.id,
@@ -26,12 +29,17 @@ function mapCompanion(row: CompanionRow): Companion {
   };
 }
 
+/**
+ * 创建当前用户的伴侣配置。
+ */
 export async function createCompanion(
   db: D1Database,
   userId: string,
   input: CreateCompanionInput
 ) {
+  // now：伴侣创建和更新时间，统一保存 ISO 字符串。
   const now = new Date().toISOString();
+  // companion：写入数据库前构造的伴侣领域对象。
   const companion = {
     id: crypto.randomUUID(),
     userId,
@@ -66,6 +74,9 @@ export async function createCompanion(
   return companion;
 }
 
+/**
+ * 查询当前用户的伴侣列表。
+ */
 export async function listCompanions(db: D1Database, userId: string) {
   const result = await db
     .prepare(
@@ -80,6 +91,9 @@ export async function listCompanions(db: D1Database, userId: string) {
   return result.results.map(mapCompanion);
 }
 
+/**
+ * 按 ID 查询当前用户的一条伴侣配置。
+ */
 export async function getCompanion(db: D1Database, userId: string, id: string) {
   const row = await db
     .prepare(
@@ -93,6 +107,9 @@ export async function getCompanion(db: D1Database, userId: string, id: string) {
   return row ? mapCompanion(row) : null;
 }
 
+/**
+ * 更新当前用户的一条伴侣配置。
+ */
 export async function updateCompanion(
   db: D1Database,
   userId: string,
@@ -105,6 +122,7 @@ export async function updateCompanion(
     return null;
   }
 
+  // next：合并局部更新后的伴侣领域对象。
   const next = {
     ...existing,
     ...input,

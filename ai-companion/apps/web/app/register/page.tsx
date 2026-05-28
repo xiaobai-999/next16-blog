@@ -5,16 +5,27 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { listCompanions, register } from "../../lib/api";
 
+/**
+ * 注册页面。
+ *
+ * 注册成功后会自动建立登录态，再进入伴侣创建或聊天流程。
+ */
 export default function RegisterPage() {
   const router = useRouter();
+  // error：注册接口返回的错误信息，用于表单内展示。
   const [error, setError] = useState("");
+  // pending：注册请求提交状态，用于禁用按钮防止重复提交。
   const [pending, setPending] = useState(false);
 
+  /**
+   * 提交注册表单并创建新用户。
+   */
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
     setPending(true);
 
+    // formData：注册表单数据，转换后提交给共享注册 schema 对应的接口。
     const formData = new FormData(event.currentTarget);
 
     try {
@@ -24,6 +35,7 @@ export default function RegisterPage() {
         name: String(formData.get("name") ?? "") || undefined
       });
 
+      // companions：注册后通常为空；保留判断以兼容已有账号补登录态的场景。
       const { companions } = await listCompanions();
       router.push(companions.length > 0 ? "/chat" : "/companion/setup");
     } catch (caught) {
