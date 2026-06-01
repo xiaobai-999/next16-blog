@@ -7,6 +7,7 @@ import type {
   UpdateMemoryInput
 } from "@ai-companion/shared";
 import { listCompanions } from "./companions";
+import { applyMemoryQualityRules } from "./memory-quality";
 import { ServiceError } from "./service-error";
 
 type MemoryRow = {
@@ -237,7 +238,7 @@ export async function listPromptMemories(
 /**
  * 创建一条记忆记录。
  *
- * 同一用户和伴侣下 content 完全相同的记忆会复用旧记录，避免重复写入。
+ * 手动新增时仍保留精确去重兜底；自动提取会先经过 memory-quality。
  */
 export async function createMemoryRecord(
   db: D1Database,
@@ -250,19 +251,45 @@ export async function createMemoryRecord(
     throw new ServiceError("BAD_REQUEST", "记忆内容不能为空");
   }
 
-  // existing：同用户同伴侣下完全相同的记忆内容，用于第一版精确去重。
+  // existing：同用户同伴侣同类型下完全相同的 active 记忆，用于手动新增兜底去重。
   const existing = await db
     .prepare(
       `SELECT ${MEMORY_SELECT_COLUMNS}
        FROM memories
-       WHERE user_id = ? AND companion_id = ? AND content = ? AND deleted_at IS NULL
+       WHERE user_id = ?
+         AND companion_id = ?
+         AND type = ?
+         AND content = ?
+         AND status = 'active'
+         AND deleted_at IS NULL
        LIMIT 1`
     )
-    .bind(userId, input.companionId, normalizedContent)
+    .bind(userId, input.companionId, input.type, normalizedContent)
     .first<MemoryRow>();
 
   if (existing) {
-    return mapMemory(existing);
+    // now：重复命中时间，更新旧记忆排序字段。
+    const now = new Date().toISOString();
+    // nextImportance：重复命中时保留更高重要性。
+    const nextImportance = Math.max(existing.importance, input.importance);
+    // nextConfidence：重复命中时保留更高置信度。
+    const nextConfidence = Math.max(existing.confidence, input.confidence ?? 1);
+
+    await db
+      .prepare(
+        `UPDATE memories
+         SET importance = ?, confidence = ?, updated_at = ?
+         WHERE id = ? AND user_id = ?`
+      )
+      .bind(nextImportance, nextConfidence, now, existing.id, userId)
+      .run();
+
+    return mapMemory({
+      ...existing,
+      importance: nextImportance,
+      confidence: nextConfidence,
+      updated_at: now
+    });
   }
 
   // now：记忆创建和更新时间，统一保存 ISO 字符串。
@@ -370,22 +397,28 @@ export async function createExtractedMemories(
   const savedMemories: Memory[] = [];
 
   for (const memoryInput of memories) {
-    // candidate：模型提取的候选记忆；status 由 memory-policy 决定。
-    const { candidate } = memoryInput;
+    // qualityResult：候选记忆写入前的去重、合并、冲突和过期规则结果。
+    const qualityResult = await applyMemoryQualityRules(db, userId, companionId, memoryInput);
+
+    if (qualityResult.action === "use_existing") {
+      savedMemories.push(qualityResult.memory);
+      continue;
+    }
 
     savedMemories.push(
       await createMemoryRecord(db, userId, {
         companionId,
-        type: candidate.type,
-        content: candidate.content,
-        importance: candidate.importance,
+        type: qualityResult.candidate.type,
+        content: qualityResult.candidate.content,
+        importance: qualityResult.candidate.importance,
         source: "extracted",
         sourceMessageId,
-        status: memoryInput.status,
-        confidence: candidate.confidence,
+        status: qualityResult.status,
+        confidence: qualityResult.candidate.confidence,
         sourceConversationId,
-        expiresAt: candidate.expiresAt ?? null,
-        confirmationReason: memoryInput.confirmationReason
+        expiresAt: qualityResult.expiresAt ?? null,
+        conflictWithMemoryId: qualityResult.conflictWithMemoryId ?? null,
+        confirmationReason: qualityResult.confirmationReason
       })
     );
   }
@@ -512,6 +545,21 @@ export async function confirmMemory(db: D1Database, userId: string, id: string) 
 
   // now：确认时间，写入 updated_at 用于用户侧排序。
   const now = new Date().toISOString();
+
+  if (existing.conflict_with_memory_id) {
+    await db
+      .prepare(
+        `UPDATE memories
+         SET status = 'archived', archived_at = ?, updated_at = ?
+         WHERE id = ?
+           AND user_id = ?
+           AND companion_id = ?
+           AND status = 'active'
+           AND deleted_at IS NULL`
+      )
+      .bind(now, now, existing.conflict_with_memory_id, userId, existing.companion_id)
+      .run();
+  }
 
   await db
     .prepare(
