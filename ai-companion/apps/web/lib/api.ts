@@ -22,9 +22,11 @@ import type {
   LoginInput,
   MeResponse,
   MemoriesResponse,
+  MemoryStatus,
   MemoryResponse,
   MessagesResponse,
-  RegisterInput
+  RegisterInput,
+  UpdateMemoryInput
 } from "@ai-companion/shared";
 
 // apiBaseUrl：前端请求后端 API 的基础地址，本地默认指向 Wrangler dev。
@@ -136,8 +138,22 @@ export function listMessages(conversationId: string) {
 /**
  * 获取当前用户的长期记忆列表。
  */
-export function listMemories() {
-  return apiRequest<MemoriesResponse>(API_MEMORIES_PATH);
+export function listMemories(filters?: { status?: MemoryStatus; includeArchived?: boolean }) {
+  // params：记忆列表筛选参数，避免前端拼接 query 时泄漏无效字段。
+  const params = new URLSearchParams();
+
+  if (filters?.status) {
+    params.set("status", filters.status);
+  }
+
+  if (filters?.includeArchived) {
+    params.set("includeArchived", "true");
+  }
+
+  // query：最终追加到 /memories 后的查询字符串。
+  const query = params.toString();
+
+  return apiRequest<MemoriesResponse>(`${API_MEMORIES_PATH}${query ? `?${query}` : ""}`);
 }
 
 /**
@@ -151,11 +167,39 @@ export function createMemory(input: CreateMemoryInput) {
 }
 
 /**
+ * 更新指定长期记忆的用户可编辑字段。
+ */
+export function updateMemory(id: string, input: UpdateMemoryInput) {
+  return apiRequest<MemoryResponse>(`${API_MEMORIES_PATH}/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input)
+  });
+}
+
+/**
  * 删除指定长期记忆。
  */
 export function deleteMemory(id: string) {
   return apiRequest<{ ok: true }>(`${API_MEMORIES_PATH}/${id}`, {
     method: "DELETE"
+  });
+}
+
+/**
+ * 确认一条待确认记忆，使其进入后续聊天上下文。
+ */
+export function confirmMemory(id: string) {
+  return apiRequest<MemoryResponse>(`${API_MEMORIES_PATH}/${id}/confirm`, {
+    method: "POST"
+  });
+}
+
+/**
+ * 拒绝一条待确认记忆，后端会按软删除处理。
+ */
+export function rejectMemory(id: string) {
+  return apiRequest<{ ok: true }>(`${API_MEMORIES_PATH}/${id}/reject`, {
+    method: "POST"
   });
 }
 

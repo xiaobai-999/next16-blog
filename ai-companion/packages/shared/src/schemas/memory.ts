@@ -54,6 +54,18 @@ export const createMemorySchema = z.object({
   importance: z.number().int().min(1).max(5).default(3)
 });
 
+// updateMemorySchema：用户在记忆管理页允许修改的字段集合。
+export const updateMemorySchema = z.object({
+  // type：用户修正后的记忆类型。
+  type: memoryTypeSchema.optional(),
+  // content：用户修正后的记忆正文。
+  content: z.string().min(1).max(500).optional(),
+  // importance：用户调整后的重要性。
+  importance: z.number().int().min(1).max(5).optional(),
+  // expiresAt：事件类记忆的过期时间，null 表示取消过期时间。
+  expiresAt: z.string().datetime().nullable().optional()
+});
+
 // candidateMemorySchema：模型自动提取出的候选记忆，后续交由 memory-policy 决策是否写入。
 export const candidateMemorySchema = z.object({
   // type：模型判断的候选记忆类型。
@@ -78,6 +90,7 @@ export const memoryExtractionResultSchema = z.object({
 export type MemorySource = z.infer<typeof memorySourceSchema>;
 export type Memory = z.infer<typeof memorySchema>;
 export type CreateMemoryInput = z.infer<typeof createMemorySchema>;
+export type UpdateMemoryInput = z.infer<typeof updateMemorySchema>;
 export type CandidateMemory = z.infer<typeof candidateMemorySchema>;
 export type ExtractedMemory = CandidateMemory;
 export type MemoryExtractionResult = z.infer<typeof memoryExtractionResultSchema>;

@@ -499,9 +499,14 @@ textarea {
   border: 1px solid #e3e8ef;
   border-radius: 8px;
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   padding: 12px;
+}
+
+.memory-item.pending_confirmation {
+  border-color: #f7c948;
+  background: #fffbeb;
 }
 
 .memory-item p {
@@ -509,7 +514,91 @@ textarea {
   line-height: 1.6;
 }
 
-.memory-item span,
+.memory-content {
+  min-width: 0;
+}
+
+.memory-meta-row {
+  color: #435163;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.memory-meta-row.muted {
+  color: #667085;
+  font-weight: 500;
+  margin-bottom: 0;
+}
+
+.memory-status {
+  border: 1px solid #cdd5df;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #344054;
+  padding: 2px 8px;
+}
+
+.memory-status.pending_confirmation {
+  border-color: #f7c948;
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.memory-status.active {
+  border-color: #a7f3d0;
+  background: #ecfdf3;
+  color: #067647;
+}
+
+.memory-reason {
+  border-left: 3px solid #f7c948;
+  color: #7a5a00;
+  margin-top: 10px;
+  padding-left: 10px;
+}
+
+.memory-actions {
+  align-content: start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.memory-actions button {
+  min-height: 36px;
+  padding: 0 12px;
+}
+
+.danger-button {
+  border-color: #fecdca;
+  color: #b42318;
+}
+
+.memory-edit-form {
+  display: grid;
+  gap: 12px;
+  grid-column: 1 / -1;
+}
+
+.memory-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.section-heading-row {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.section-heading-row span,
 .empty-memory {
   color: #667085;
   font-size: 0.9rem;
@@ -517,6 +606,15 @@ textarea {
 
 .empty-memory {
   margin: 0;
+}
+
+.memory-page-error {
+  margin-bottom: 16px;
+}
+
+.memory-correction-link {
+  display: inline-flex;
+  margin-top: 6px;
 }
 
 @media (max-width: 520px) {
@@ -583,6 +681,14 @@ textarea {
   }
 
   .memory-item {
+    grid-template-columns: 1fr;
+  }
+
+  .memory-actions {
+    justify-content: flex-start;
+  }
+
+  .memory-edit-grid {
     grid-template-columns: 1fr;
   }
 }

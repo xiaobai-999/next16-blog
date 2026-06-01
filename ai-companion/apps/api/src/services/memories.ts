@@ -3,7 +3,8 @@ import type {
   CreateMemoryInput,
   Memory,
   MemoryStatus,
-  MemorySource
+  MemorySource,
+  UpdateMemoryInput
 } from "@ai-companion/shared";
 import { listCompanions } from "./companions";
 import { ServiceError } from "./service-error";
@@ -87,6 +88,15 @@ type CreateExtractedMemoryInput = {
   confirmationReason?: string;
 };
 
+type MemoryListFilters = {
+  // status：指定状态筛选；未传时默认返回 active 和 pending_confirmation。
+  status?: MemoryStatus;
+  // includeArchived：未指定状态时是否额外返回 archived 记忆。
+  includeArchived?: boolean;
+  // sourceConversationId：可选来源会话筛选，阶段 9 先作为轻量排查入口预留。
+  sourceConversationId?: string;
+};
+
 const MEMORY_SELECT_COLUMNS = [
   "id",
   "user_id",
@@ -155,29 +165,41 @@ async function getCurrentCompanionId(db: D1Database, userId: string) {
 /**
  * 按重要性和更新时间查询当前用户的非删除记忆列表。
  *
- * status 为空时返回全部非 deleted 记忆；传入时用于阶段 9 的待确认列表。
+ * 默认只返回 active 和 pending_confirmation；archived 需要显式开启。
  */
-export async function listMemories(db: D1Database, userId: string, status?: MemoryStatus) {
-  const statement =
-    status === undefined
-      ? db
-          .prepare(
-            `SELECT ${MEMORY_SELECT_COLUMNS}
-             FROM memories
-             WHERE user_id = ? AND status != 'deleted' AND deleted_at IS NULL
-             ORDER BY importance DESC, confidence DESC, updated_at DESC`
-          )
-          .bind(userId)
-      : db
-          .prepare(
-            `SELECT ${MEMORY_SELECT_COLUMNS}
-             FROM memories
-             WHERE user_id = ? AND status = ? AND deleted_at IS NULL
-             ORDER BY importance DESC, confidence DESC, updated_at DESC`
-          )
-          .bind(userId, status);
+export async function listMemories(
+  db: D1Database,
+  userId: string,
+  filters: MemoryListFilters = {}
+) {
+  // whereClauses：仅由受控条件组成，所有用户输入都通过 bind 传入。
+  const whereClauses = ["user_id = ?", "status != 'deleted'", "deleted_at IS NULL"];
+  // bindValues：与 whereClauses 中占位符一一对应的查询参数。
+  const bindValues: (string | number)[] = [userId];
 
-  const result = await statement.all<MemoryRow>();
+  if (filters.status) {
+    whereClauses.push("status = ?");
+    bindValues.push(filters.status);
+  } else if (filters.includeArchived) {
+    whereClauses.push("status IN ('active', 'pending_confirmation', 'archived')");
+  } else {
+    whereClauses.push("status IN ('active', 'pending_confirmation')");
+  }
+
+  if (filters.sourceConversationId) {
+    whereClauses.push("source_conversation_id = ?");
+    bindValues.push(filters.sourceConversationId);
+  }
+
+  const result = await db
+    .prepare(
+      `SELECT ${MEMORY_SELECT_COLUMNS}
+       FROM memories
+       WHERE ${whereClauses.join(" AND ")}
+       ORDER BY importance DESC, confidence DESC, updated_at DESC`
+    )
+    .bind(...bindValues)
+    .all<MemoryRow>();
 
   return result.results.map(mapMemory);
 }
@@ -372,11 +394,185 @@ export async function createExtractedMemories(
 }
 
 /**
+ * 更新当前用户的一条记忆。
+ *
+ * 仅允许更新用户可控字段；deleted 记忆不能再被修改。
+ */
+export async function updateMemory(
+  db: D1Database,
+  userId: string,
+  id: string,
+  input: UpdateMemoryInput
+) {
+  // existing：待更新记忆，查询条件包含 user_id 以避免越权。
+  const existing = await db
+    .prepare(
+      `SELECT ${MEMORY_SELECT_COLUMNS}
+       FROM memories
+       WHERE id = ? AND user_id = ?
+       LIMIT 1`
+    )
+    .bind(id, userId)
+    .first<MemoryRow>();
+
+  if (!existing || existing.deleted_at !== null || existing.status === "deleted") {
+    throw new ServiceError("NOT_FOUND", "记忆不存在");
+  }
+
+  // setClauses：根据请求体动态生成的更新字段，字段名来自白名单。
+  const setClauses: string[] = [];
+  // bindValues：更新字段值，顺序与 setClauses 保持一致。
+  const bindValues: (string | number | null)[] = [];
+
+  if (input.type !== undefined) {
+    setClauses.push("type = ?");
+    bindValues.push(input.type);
+  }
+
+  if (input.content !== undefined) {
+    // normalizedContent：修剪后的记忆正文，避免保存纯空白内容。
+    const normalizedContent = input.content.trim();
+
+    if (!normalizedContent) {
+      throw new ServiceError("BAD_REQUEST", "记忆内容不能为空");
+    }
+
+    setClauses.push("content = ?");
+    bindValues.push(normalizedContent);
+  }
+
+  if (input.importance !== undefined) {
+    setClauses.push("importance = ?");
+    bindValues.push(input.importance);
+  }
+
+  if (input.expiresAt !== undefined) {
+    setClauses.push("expires_at = ?");
+    bindValues.push(input.expiresAt);
+  }
+
+  if (setClauses.length === 0) {
+    return mapMemory(existing);
+  }
+
+  // now：统一更新 updated_at，便于列表按最近修正排序。
+  const now = new Date().toISOString();
+  setClauses.push("updated_at = ?");
+  bindValues.push(now, id, userId);
+
+  await db
+    .prepare(
+      `UPDATE memories
+       SET ${setClauses.join(", ")}
+       WHERE id = ? AND user_id = ? AND deleted_at IS NULL`
+    )
+    .bind(...bindValues)
+    .run();
+
+  // updated：返回数据库中的最新行，确保响应和持久化结果一致。
+  const updated = await db
+    .prepare(
+      `SELECT ${MEMORY_SELECT_COLUMNS}
+       FROM memories
+       WHERE id = ? AND user_id = ?
+       LIMIT 1`
+    )
+    .bind(id, userId)
+    .first<MemoryRow>();
+
+  if (!updated) {
+    throw new ServiceError("NOT_FOUND", "记忆不存在");
+  }
+
+  return mapMemory(updated);
+}
+
+/**
+ * 确认当前用户的一条待确认记忆。
+ */
+export async function confirmMemory(db: D1Database, userId: string, id: string) {
+  // existing：用于校验记忆存在、未删除且仍处于待确认状态。
+  const existing = await db
+    .prepare(
+      `SELECT ${MEMORY_SELECT_COLUMNS}
+       FROM memories
+       WHERE id = ? AND user_id = ?
+       LIMIT 1`
+    )
+    .bind(id, userId)
+    .first<MemoryRow>();
+
+  if (!existing || existing.deleted_at !== null || existing.status === "deleted") {
+    throw new ServiceError("NOT_FOUND", "记忆不存在");
+  }
+
+  if (existing.status !== "pending_confirmation") {
+    throw new ServiceError("BAD_REQUEST", "只能确认待确认记忆");
+  }
+
+  // now：确认时间，写入 updated_at 用于用户侧排序。
+  const now = new Date().toISOString();
+
+  await db
+    .prepare(
+      `UPDATE memories
+       SET status = 'active', updated_at = ?
+       WHERE id = ? AND user_id = ? AND status = 'pending_confirmation' AND deleted_at IS NULL`
+    )
+    .bind(now, id, userId)
+    .run();
+
+  const confirmed = await db
+    .prepare(
+      `SELECT ${MEMORY_SELECT_COLUMNS}
+       FROM memories
+       WHERE id = ? AND user_id = ?
+       LIMIT 1`
+    )
+    .bind(id, userId)
+    .first<MemoryRow>();
+
+  if (!confirmed) {
+    throw new ServiceError("NOT_FOUND", "记忆不存在");
+  }
+
+  return mapMemory(confirmed);
+}
+
+/**
+ * 拒绝当前用户的一条待确认记忆。
+ *
+ * 第一版按软删除处理，保留来源信息供后续评测或排查。
+ */
+export async function rejectMemory(db: D1Database, userId: string, id: string) {
+  // existing：用于确认只有 pending_confirmation 可以被拒绝。
+  const existing = await db
+    .prepare(
+      `SELECT ${MEMORY_SELECT_COLUMNS}
+       FROM memories
+       WHERE id = ? AND user_id = ?
+       LIMIT 1`
+    )
+    .bind(id, userId)
+    .first<MemoryRow>();
+
+  if (!existing || existing.deleted_at !== null || existing.status === "deleted") {
+    throw new ServiceError("NOT_FOUND", "记忆不存在");
+  }
+
+  if (existing.status !== "pending_confirmation") {
+    throw new ServiceError("BAD_REQUEST", "只能拒绝待确认记忆");
+  }
+
+  return softDeleteMemory(db, userId, id);
+}
+
+/**
  * 软删除当前用户的一条记忆。
  *
  * 删除条件同时包含 id 和 user_id，避免越权删除。
  */
-export async function deleteMemory(db: D1Database, userId: string, id: string) {
+export async function softDeleteMemory(db: D1Database, userId: string, id: string) {
   const now = new Date().toISOString();
   const result = await db
     .prepare(
@@ -389,3 +585,6 @@ export async function deleteMemory(db: D1Database, userId: string, id: string) {
 
   return result.meta.changes > 0;
 }
+
+// deleteMemory：兼容早期调用名，实际行为仍是软删除。
+export const deleteMemory = softDeleteMemory;

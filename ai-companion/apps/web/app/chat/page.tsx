@@ -3,6 +3,7 @@
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { API_CHAT_PATH } from "@ai-companion/shared";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Companion, FeedbackRating, Message } from "@ai-companion/shared";
@@ -60,6 +61,8 @@ export default function ChatPage() {
   const [openFeedbackMessageId, setOpenFeedbackMessageId] = useState<string | null>(null);
   // feedbackError：反馈提交失败时的轻量提示。
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  // memoryCorrectionMessageId：最近一次“记错了”反馈对应的消息 ID，用于展示记忆管理入口。
+  const [memoryCorrectionMessageId, setMemoryCorrectionMessageId] = useState<string | null>(null);
   // responseConversationIdRef：保存本次流式响应头里的会话 ID，避免依赖会话列表最新项。
   const responseConversationIdRef = useRef<string | null>(null);
   // transport：AI SDK 聊天传输层，负责把当前 conversationId 带给后端。
@@ -188,6 +191,7 @@ export default function ChatPage() {
         ...current,
         [messageId]: rating
       }));
+      setMemoryCorrectionMessageId(reason === "[memory_error]" ? messageId : null);
       setOpenFeedbackMessageId(null);
     } catch (error) {
       setFeedbackError(error instanceof Error ? error.message : "反馈提交失败");
@@ -295,6 +299,11 @@ export default function ChatPage() {
                       </div>
                       {feedbackByMessage[message.id] ? (
                         <p className="feedback-saved">已记录</p>
+                      ) : null}
+                      {memoryCorrectionMessageId === message.id ? (
+                        <Link className="memory-correction-link" href="/memories">
+                          去记忆管理页检查
+                        </Link>
                       ) : null}
                     </div>
                   ) : null}
