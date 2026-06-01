@@ -1,6 +1,8 @@
 import {
   createMemorySchema,
+  memoryStatusSchema,
   type MemoriesResponse,
+  type MemoryStatus,
   type MemoryResponse
 } from "@ai-companion/shared";
 import { Hono } from "hono";
@@ -18,8 +20,22 @@ import { apiError } from "../utils/errors";
 export const memoriesRoute = new Hono<AppEnv>()
   .use("*", authMiddleware)
   .get("/", async (c) => {
-    // 读取当前用户的全部记忆，服务层会按 user_id 过滤。
-    const memories = await listMemories(c.env.DB, c.get("currentUser").id);
+    // status：可选记忆状态过滤，阶段 9 会用于待确认记忆列表。
+    const statusParam = c.req.query("status");
+    let statusFilter: MemoryStatus | undefined;
+
+    if (statusParam !== undefined) {
+      const parsedStatus = memoryStatusSchema.safeParse(statusParam);
+
+      if (!parsedStatus.success) {
+        return apiError(c, "BAD_REQUEST", "记忆状态无效");
+      }
+
+      statusFilter = parsedStatus.data;
+    }
+
+    // 读取当前用户的非删除记忆，服务层会按 user_id 过滤。
+    const memories = await listMemories(c.env.DB, c.get("currentUser").id, statusFilter);
 
     return c.json<MemoriesResponse>({ memories });
   })

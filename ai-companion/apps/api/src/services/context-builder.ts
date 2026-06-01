@@ -29,7 +29,7 @@ export async function buildChatContext(db: D1Database, userId: string) {
     throw new ServiceError("COMPANION_REQUIRED", "请先创建伴侣");
   }
 
-  // memories：第一版按 importance 和 updated_at 取出的高价值记忆，不做向量检索。
+  // memories：只取 active、未归档、未删除、未过期的高价值记忆，不做向量检索。
   const memories = await listPromptMemories(db, userId, companion.id);
   // memoryPromptBlock：独立的长期记忆 prompt 区块，空列表时不注入。
   const memoryPromptBlock = buildMemoryPromptBlock(memories);

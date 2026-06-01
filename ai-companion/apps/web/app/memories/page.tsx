@@ -9,10 +9,12 @@ import { createMemory, deleteMemory, getMe, listMemories, logout } from "../../l
 const memoryTypeLabels: Record<MemoryType, string> = {
   profile: "资料",
   preference: "偏好",
-  event: "事件"
+  event: "事件",
+  relationship: "关系",
+  boundary: "边界"
 };
 
-const memoryTypeOrder: MemoryType[] = ["profile", "preference", "event"];
+const memoryTypeOrder: MemoryType[] = ["profile", "preference", "event", "relationship", "boundary"];
 
 /**
  * 记忆管理页面。
@@ -191,6 +193,8 @@ export default function MemoriesPage() {
               <option value="profile">资料</option>
               <option value="preference">偏好</option>
               <option value="event">事件</option>
+              <option value="relationship">关系</option>
+              <option value="boundary">边界</option>
             </select>
           </label>
           <label>

@@ -1,8 +1,9 @@
 import { memoryExtractionResultSchema } from "@ai-companion/shared";
-import type { ExtractedMemory } from "@ai-companion/shared";
+import type { CandidateMemory } from "@ai-companion/shared";
 import { generateObject } from "ai";
 import type { AppEnv } from "../env";
 import { createExtractedMemories } from "./memories";
+import { decideMemoryWrite } from "./memory-policy";
 import { createModelLog } from "./model-logs";
 import { getChatModel, getModelProviderInfo } from "./model-provider";
 
@@ -26,6 +27,16 @@ const MEMORY_EXTRACTOR_SYSTEM_PROMPT = [
   "- profile：用户稳定信息，例如职业、长期目标、身份背景",
   "- preference：用户偏好，例如回答风格、语言偏好、互动禁忌",
   "- event：用户近期重要事件，例如正在准备面试、最近在做某项目",
+  "- relationship：用户明确表达的关系定位或相处方式",
+  "- boundary：用户明确提出的互动边界或禁忌",
+  "",
+  "每条记忆必须包含：",
+  "- type",
+  "- content：简短事实，不超过 500 字",
+  "- importance：1-5 的整数",
+  "- confidence：0-1 的置信度",
+  "- reason：为什么值得保存，尽量简短",
+  "- expiresAt：事件类可以填写 ISO 时间，不确定则为 null",
   "",
   "只保存满足以下条件的信息：",
   "- 用户明确表达",
@@ -41,32 +52,6 @@ const MEMORY_EXTRACTOR_SYSTEM_PROMPT = [
   "- 模型推断出的性格标签",
   "- 临时情绪碎片"
 ].join("\n");
-
-const SENSITIVE_PATTERNS = [
-  /身份证/,
-  /手机号|电话/,
-  /住址|地址/,
-  /银行卡|信用卡|账户|账号/,
-  /病历|诊断|处方|医保/,
-  /\b\d{11}\b/,
-  /\b\d{15,18}\b/
-];
-
-/**
- * 判断候选记忆是否可能包含敏感信息。
- *
- * 这是模型规则之外的兜底过滤，第一版使用简单关键词和数字模式。
- */
-function isSensitiveMemory(memory: ExtractedMemory) {
-  return SENSITIVE_PATTERNS.some((pattern) => pattern.test(memory.content));
-}
-
-/**
- * 对模型提取结果做服务端兜底过滤。
- */
-function filterExtractedMemories(memories: ExtractedMemory[]) {
-  return memories.filter((memory) => !isSensitiveMemory(memory));
-}
 
 /**
  * 提取可写入日志的错误摘要。
@@ -86,9 +71,9 @@ function errorSummary(error: unknown) {
 }
 
 /**
- * 从最新一轮对话中提取长期记忆并写入数据库。
+ * 从最新一轮对话中提取长期记忆候选，并按写入策略保存。
  *
- * 失败时由调用方捕获并记录日志，不能影响主聊天回复。
+ * 提取或解析失败时返回空数组，不能影响主聊天回复。
  */
 export async function extractAndStoreMemories(
   env: AppEnv["Bindings"],
@@ -105,8 +90,8 @@ export async function extractAndStoreMemories(
   const modelInfo = getModelProviderInfo(env);
   // startedAt：记忆提取模型调用开始时间，用于稳定性排查。
   const startedAt = Date.now();
-  // extractedMemories：模型返回并通过 schema 校验后的候选记忆。
-  let extractedMemories: ExtractedMemory[] = [];
+  // candidateMemories：模型返回并通过 schema 校验后的候选记忆。
+  let candidateMemories: CandidateMemory[] = [];
 
   try {
     const result = await generateObject({
@@ -117,7 +102,7 @@ export async function extractAndStoreMemories(
       prompt,
       temperature: 0
     });
-    extractedMemories = result.object.memories;
+    candidateMemories = result.object.memories;
 
     await createModelLog(env.DB, {
       traceId: input.traceId,
@@ -155,13 +140,33 @@ export async function extractAndStoreMemories(
       });
     });
 
-    throw error;
+    return [];
   }
 
-  // memories：通过 Zod 校验后的候选记忆，再做敏感信息兜底过滤。
-  const memories = filterExtractedMemories(extractedMemories);
+  // memoriesToSave：候选记忆经 memory-policy 判断后，只有 save 决策会入库。
+  const memoriesToSave = candidateMemories.flatMap((candidate) => {
+    const decision = decideMemoryWrite(candidate);
 
-  if (memories.length === 0) {
+    if (decision.action === "skip") {
+      console.debug("Skip candidate memory", {
+        traceId: input.traceId,
+        reason: decision.reason,
+        type: candidate.type
+      });
+
+      return [];
+    }
+
+    return [
+      {
+        candidate,
+        status: decision.status,
+        confirmationReason: decision.confirmationReason
+      }
+    ];
+  });
+
+  if (memoriesToSave.length === 0) {
     return [];
   }
 
@@ -169,7 +174,8 @@ export async function extractAndStoreMemories(
     env.DB,
     input.userId,
     input.companionId,
-    memories,
-    input.sourceMessageId
+    memoriesToSave,
+    input.sourceMessageId,
+    input.conversationId
   );
 }
