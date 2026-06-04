@@ -1,0 +1,92 @@
+[
+  {
+    "id": "memory-expiration-event-interview-001",
+    "category": "expiration",
+    "givenMemories": [
+      {
+        "type": "event",
+        "status": "active",
+        "content": "用户这周在准备面试",
+        "expiresAt": "2026-05-01T00:00:00.000Z"
+      }
+    ],
+    "now": "2026-05-28T00:00:00.000Z",
+    "userInput": "今天做点什么？",
+    "forbiddenBehavior": "把过期面试事件当成当前状态"
+  },
+  {
+    "id": "memory-expiration-event-active-001",
+    "category": "expiration",
+    "givenMemories": [
+      {
+        "type": "event",
+        "status": "active",
+        "content": "用户明天有前端面试",
+        "expiresAt": "2026-06-05T00:00:00.000Z"
+      }
+    ],
+    "now": "2026-06-04T00:00:00.000Z",
+    "userInput": "今晚怎么安排？",
+    "expectedBehavior": "可以使用明天面试这条未过期事件"
+  },
+  {
+    "id": "memory-expiration-preference-no-expiry-001",
+    "category": "expiration",
+    "givenMemories": [
+      {
+        "type": "preference",
+        "status": "active",
+        "content": "用户喜欢直接给结论",
+        "expiresAt": null
+      }
+    ],
+    "now": "2026-06-04T00:00:00.000Z",
+    "userInput": "帮我总结这个问题。",
+    "expectedBehavior": "稳定偏好没有 expiresAt 时可以继续使用"
+  },
+  {
+    "id": "memory-expiration-archived-event-001",
+    "category": "expiration",
+    "givenMemories": [
+      {
+        "type": "event",
+        "status": "archived",
+        "content": "用户上个月在准备面试",
+        "expiresAt": "2026-05-01T00:00:00.000Z"
+      }
+    ],
+    "now": "2026-06-04T00:00:00.000Z",
+    "userInput": "最近有什么学习安排建议？",
+    "forbiddenBehavior": "召回 archived 事件作为当前安排"
+  },
+  {
+    "id": "memory-expiration-short-term-project-001",
+    "category": "expiration",
+    "givenMemories": [
+      {
+        "type": "event",
+        "status": "active",
+        "content": "用户这周要交 AI Companion 项目复盘",
+        "expiresAt": "2026-06-10T00:00:00.000Z"
+      }
+    ],
+    "now": "2026-06-04T00:00:00.000Z",
+    "userInput": "今天复习项目怎么安排？",
+    "expectedBehavior": "使用未过期项目复盘事件"
+  },
+  {
+    "id": "memory-expiration-deleted-expired-001",
+    "category": "expiration",
+    "givenMemories": [
+      {
+        "type": "event",
+        "status": "deleted",
+        "content": "用户今天晚上有直播",
+        "expiresAt": "2026-06-04T23:00:00.000Z"
+      }
+    ],
+    "now": "2026-06-04T12:00:00.000Z",
+    "userInput": "晚上安排什么？",
+    "forbiddenBehavior": "使用 deleted 事件，即使它还没过期"
+  }
+]

@@ -1,0 +1,99 @@
+[
+  {
+    "id": "memory-extract-preference-answer-style-001",
+    "category": "extraction",
+    "conversation": [
+      {
+        "role": "user",
+        "content": "以后回答我尽量短一点，直接给结论。"
+      }
+    ],
+    "expectedMemories": [
+      {
+        "type": "preference",
+        "contentIncludes": ["回答", "短", "直接"]
+      }
+    ],
+    "forbiddenMemories": []
+  },
+  {
+    "id": "memory-extract-food-preference-001",
+    "category": "extraction",
+    "conversation": [
+      {
+        "role": "user",
+        "content": "我不喜欢吃香菜，以后推荐吃的别带香菜。"
+      }
+    ],
+    "expectedMemories": [
+      {
+        "type": "preference",
+        "contentIncludes": ["不喜欢", "香菜"]
+      }
+    ],
+    "forbiddenMemories": []
+  },
+  {
+    "id": "memory-extract-profile-work-001",
+    "category": "extraction",
+    "conversation": [
+      {
+        "role": "user",
+        "content": "我现在主要做 Next.js 前端开发，最近在补 TypeScript。"
+      }
+    ],
+    "expectedMemories": [
+      {
+        "type": "profile",
+        "contentIncludes": ["Next.js", "前端", "TypeScript"]
+      }
+    ],
+    "forbiddenMemories": []
+  },
+  {
+    "id": "memory-extract-boundary-nickname-001",
+    "category": "extraction",
+    "conversation": [
+      {
+        "role": "user",
+        "content": "以后不要叫我宝贝，我不喜欢这种称呼。"
+      }
+    ],
+    "expectedMemories": [
+      {
+        "type": "boundary",
+        "contentIncludes": ["不要叫", "宝贝"]
+      }
+    ],
+    "forbiddenMemories": []
+  },
+  {
+    "id": "memory-extract-event-interview-001",
+    "category": "extraction",
+    "conversation": [
+      {
+        "role": "user",
+        "content": "我这周五有前端面试，最近要集中准备项目复盘。"
+      }
+    ],
+    "expectedMemories": [
+      {
+        "type": "event",
+        "contentIncludes": ["周五", "前端面试", "项目复盘"]
+      }
+    ],
+    "forbiddenMemories": []
+  },
+  {
+    "id": "memory-extract-noise-smalltalk-001",
+    "category": "extraction",
+    "conversation": [
+      {
+        "role": "user",
+        "content": "哈哈今天太阳好大，随便聊两句。"
+      }
+    ],
+    "expectedMemories": [],
+    "forbiddenBehavior": "保存一次性闲聊或天气感受"
+  }
+]

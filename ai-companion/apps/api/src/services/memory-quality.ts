@@ -391,7 +391,11 @@ export async function detectMemoryConflict(
  */
 export function inferMemoryExpiresAt(candidate: CandidateMemory, now = new Date()) {
   if (candidate.expiresAt) {
-    return candidate.expiresAt;
+    const explicitExpiresAt = new Date(candidate.expiresAt);
+
+    if (!Number.isNaN(explicitExpiresAt.getTime()) && explicitExpiresAt.getTime() > now.getTime()) {
+      return candidate.expiresAt;
+    }
   }
 
   if (candidate.type !== "event") {

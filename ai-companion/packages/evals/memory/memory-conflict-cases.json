@@ -1,0 +1,98 @@
+[
+  {
+    "id": "memory-conflict-food-spicy-001",
+    "category": "conflict",
+    "givenMemories": [
+      {
+        "type": "preference",
+        "status": "active",
+        "content": "用户不吃辣",
+        "importance": 4,
+        "confidence": 0.9
+      }
+    ],
+    "userInput": "我最近可以接受微辣了。",
+    "expectedBehavior": "生成 pending_confirmation，指向旧记忆",
+    "expectedFields": ["conflict_with_memory_id", "confirmation_reason"]
+  },
+  {
+    "id": "memory-conflict-food-cilantro-001",
+    "category": "conflict",
+    "givenMemories": [
+      {
+        "type": "preference",
+        "status": "active",
+        "content": "用户不喜欢吃香菜",
+        "importance": 4,
+        "confidence": 0.9
+      }
+    ],
+    "userInput": "我现在挺喜欢香菜的，可以推荐香菜菜品。",
+    "expectedBehavior": "生成冲突候选并等待确认",
+    "expectedFields": ["conflict_with_memory_id", "confirmation_reason"]
+  },
+  {
+    "id": "memory-conflict-boundary-nickname-001",
+    "category": "conflict",
+    "givenMemories": [
+      {
+        "type": "boundary",
+        "status": "active",
+        "content": "用户不喜欢被叫宝贝",
+        "importance": 5,
+        "confidence": 0.95
+      }
+    ],
+    "userInput": "以后你可以偶尔叫我宝贝。",
+    "expectedBehavior": "按边界变化进入 pending_confirmation",
+    "expectedFields": ["status", "confirmation_reason"]
+  },
+  {
+    "id": "memory-conflict-profile-role-001",
+    "category": "conflict",
+    "givenMemories": [
+      {
+        "type": "profile",
+        "status": "active",
+        "content": "用户主要做前端开发",
+        "importance": 4,
+        "confidence": 0.9
+      }
+    ],
+    "userInput": "我现在已经转后端开发了，主要写 Go。",
+    "expectedBehavior": "新资料需要确认或合并，不应同时机械使用旧资料",
+    "expectedFields": ["status"]
+  },
+  {
+    "id": "memory-conflict-relationship-001",
+    "category": "conflict",
+    "givenMemories": [
+      {
+        "type": "relationship",
+        "status": "active",
+        "content": "用户希望 assistant 像学习搭子一样互动",
+        "importance": 4,
+        "confidence": 0.9
+      }
+    ],
+    "userInput": "以后别像学习搭子了，就当普通工具助手。",
+    "expectedBehavior": "关系定位变化进入确认流程",
+    "expectedFields": ["status", "confirmation_reason"]
+  },
+  {
+    "id": "memory-conflict-no-conflict-extra-detail-001",
+    "category": "conflict",
+    "givenMemories": [
+      {
+        "type": "preference",
+        "status": "active",
+        "content": "用户喜欢简短回答",
+        "importance": 3,
+        "confidence": 0.9
+      }
+    ],
+    "userInput": "以后回答还是简短点，最好先给结论。",
+    "expectedBehavior": "合并或更新旧记忆，不应生成冲突",
+    "forbiddenBehavior": "把补充细节误判为矛盾"
+  }
+]

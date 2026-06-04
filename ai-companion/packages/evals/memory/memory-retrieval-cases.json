@@ -1,0 +1,113 @@
+[
+  {
+    "id": "memory-retrieval-food-avoid-spicy-001",
+    "category": "retrieval",
+    "givenMemories": [
+      {
+        "type": "preference",
+        "status": "active",
+        "content": "用户不喜欢吃辣",
+        "importance": 4,
+        "confidence": 0.9
+      },
+      {
+        "type": "profile",
+        "status": "active",
+        "content": "用户主要做 Next.js 前端开发",
+        "importance": 3,
+        "confidence": 0.9
+      }
+    ],
+    "userInput": "晚上吃什么比较合适？",
+    "expectedBehavior": "召回不喜欢吃辣的饮食偏好",
+    "forbiddenBehavior": "优先召回前端开发资料"
+  },
+  {
+    "id": "memory-retrieval-work-interview-001",
+    "category": "retrieval",
+    "givenMemories": [
+      {
+        "type": "event",
+        "status": "active",
+        "content": "用户这周在准备前端面试",
+        "importance": 5,
+        "confidence": 0.9
+      },
+      {
+        "type": "preference",
+        "status": "active",
+        "content": "用户喜欢喝冰美式",
+        "importance": 2,
+        "confidence": 0.8
+      }
+    ],
+    "userInput": "我今天应该怎么安排复习？",
+    "expectedBehavior": "召回前端面试准备相关记忆",
+    "forbiddenBehavior": "把冰美式偏好作为主要上下文"
+  },
+  {
+    "id": "memory-retrieval-boundary-address-001",
+    "category": "retrieval",
+    "givenMemories": [
+      {
+        "type": "boundary",
+        "status": "active",
+        "content": "用户不喜欢被叫宝贝",
+        "importance": 5,
+        "confidence": 0.95
+      }
+    ],
+    "userInput": "以后你怎么称呼我比较好？",
+    "expectedBehavior": "召回称呼边界",
+    "forbiddenBehavior": "建议继续使用宝贝这类称呼"
+  },
+  {
+    "id": "memory-retrieval-ignore-deleted-001",
+    "category": "retrieval",
+    "givenMemories": [
+      {
+        "type": "preference",
+        "status": "deleted",
+        "content": "用户不喜欢吃香菜",
+        "importance": 4,
+        "confidence": 0.9
+      }
+    ],
+    "userInput": "点外卖有什么要避开的？",
+    "expectedBehavior": "不召回 deleted 记忆",
+    "forbiddenBehavior": "继续基于 deleted 记忆要求避开香菜"
+  },
+  {
+    "id": "memory-retrieval-ignore-pending-001",
+    "category": "retrieval",
+    "givenMemories": [
+      {
+        "type": "preference",
+        "status": "pending_confirmation",
+        "content": "用户现在可以接受微辣",
+        "importance": 4,
+        "confidence": 0.7
+      }
+    ],
+    "userInput": "今晚想吃点有味道的，推荐什么？",
+    "expectedBehavior": "不把 pending_confirmation 记忆当成已确认偏好",
+    "forbiddenBehavior": "直接断言用户现在可以吃微辣"
+  },
+  {
+    "id": "memory-retrieval-user-scope-001",
+    "category": "retrieval",
+    "givenMemories": [
+      {
+        "type": "preference",
+        "status": "active",
+        "userId": "other-user",
+        "content": "另一个用户喜欢重辣火锅",
+        "importance": 4,
+        "confidence": 0.9
+      }
+    ],
+    "userInput": "我想吃火锅，有什么建议？",
+    "expectedBehavior": "严格按当前 user_id 隔离召回",
+    "forbiddenBehavior": "召回 other-user 的重辣火锅偏好"
+  }
+]

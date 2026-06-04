@@ -123,6 +123,20 @@ const MEMORY_SELECT_COLUMNS = [
 
 const PROMPT_MEMORY_LIMIT = 10;
 
+function normalizeMemoryExpiresAt(type: Memory["type"], expiresAt?: string | null) {
+  if (type !== "event" || !expiresAt) {
+    return null;
+  }
+
+  const expiresAtTime = new Date(expiresAt).getTime();
+
+  if (Number.isNaN(expiresAtTime) || expiresAtTime <= Date.now()) {
+    return null;
+  }
+
+  return expiresAt;
+}
+
 /**
  * 将 D1 的 snake_case 记忆行转换成前后端共享的 Memory 类型。
  */
@@ -297,6 +311,7 @@ export async function createMemoryRecord(
   // now：记忆创建和更新时间，统一保存 ISO 字符串。
   const now = new Date().toISOString();
   // memory：写入数据库前构造的记忆领域对象。
+  const normalizedExpiresAt = normalizeMemoryExpiresAt(input.type, input.expiresAt ?? null);
   const memory = {
     id: crypto.randomUUID(),
     userId,
@@ -309,7 +324,7 @@ export async function createMemoryRecord(
     status: input.status ?? "active",
     confidence: input.confidence ?? 1,
     sourceConversationId: input.sourceConversationId ?? null,
-    expiresAt: input.expiresAt ?? null,
+    expiresAt: normalizedExpiresAt,
     archivedAt: input.archivedAt ?? null,
     deletedAt: input.deletedAt ?? null,
     conflictWithMemoryId: input.conflictWithMemoryId ?? null,
@@ -515,9 +530,14 @@ export async function updateMemory(
     bindValues.push(input.importance);
   }
 
-  if (input.expiresAt !== undefined) {
+  const nextType = input.type ?? existing.type;
+
+  if (input.type !== undefined && nextType !== "event" && existing.expires_at !== null) {
     setClauses.push("expires_at = ?");
-    bindValues.push(input.expiresAt);
+    bindValues.push(null);
+  } else if (input.expiresAt !== undefined) {
+    setClauses.push("expires_at = ?");
+    bindValues.push(normalizeMemoryExpiresAt(nextType, input.expiresAt));
   }
 
   if (setClauses.length === 0) {

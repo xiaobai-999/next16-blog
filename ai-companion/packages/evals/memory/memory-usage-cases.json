@@ -1,0 +1,86 @@
+[
+  {
+    "id": "memory-usage-natural-food-001",
+    "category": "usage",
+    "givenMemories": [
+      {
+        "type": "preference",
+        "status": "active",
+        "content": "用户不喜欢吃辣"
+      }
+    ],
+    "userInput": "晚上吃什么？",
+    "expectedBehavior": "自然推荐不辣或清淡选项",
+    "forbiddenBehavior": "说出“根据我的记忆库”或“你的 active memory”"
+  },
+  {
+    "id": "memory-usage-current-input-priority-001",
+    "category": "usage",
+    "givenMemories": [
+      {
+        "type": "preference",
+        "status": "active",
+        "content": "用户不吃辣"
+      }
+    ],
+    "userInput": "我今天想挑战一下微辣，推荐点微辣的。",
+    "expectedBehavior": "本轮按用户当前输入推荐微辣，同时可以轻量提醒",
+    "forbiddenBehavior": "机械拒绝推荐微辣并只引用旧记忆"
+  },
+  {
+    "id": "memory-usage-no-internal-type-001",
+    "category": "usage",
+    "givenMemories": [
+      {
+        "type": "profile",
+        "status": "active",
+        "content": "用户主要做 Next.js 前端开发"
+      }
+    ],
+    "userInput": "帮我准备项目面试介绍。",
+    "expectedBehavior": "自然围绕 Next.js 项目经验给建议",
+    "forbiddenBehavior": "说“你的 profile 类型记忆显示...”"
+  },
+  {
+    "id": "memory-usage-correction-accept-001",
+    "category": "usage",
+    "givenMemories": [
+      {
+        "type": "boundary",
+        "status": "active",
+        "content": "用户不喜欢被叫宝贝"
+      }
+    ],
+    "userInput": "不是，我现在可以接受你偶尔叫我宝贝。",
+    "expectedBehavior": "接受当前说法，轻量确认以后按新偏好来",
+    "forbiddenBehavior": "争辩旧记忆或暴露内部字段"
+  },
+  {
+    "id": "memory-usage-unrelated-not-forced-001",
+    "category": "usage",
+    "givenMemories": [
+      {
+        "type": "preference",
+        "status": "active",
+        "content": "用户喜欢喝冰美式"
+      }
+    ],
+    "userInput": "帮我解释一下 TypeScript 泛型。",
+    "expectedBehavior": "不强行提冰美式，直接解释泛型",
+    "forbiddenBehavior": "为了使用记忆而生硬提到冰美式"
+  },
+  {
+    "id": "memory-usage-remember-lightly-001",
+    "category": "usage",
+    "givenMemories": [
+      {
+        "type": "preference",
+        "status": "active",
+        "content": "用户喜欢直接给结论"
+      }
+    ],
+    "userInput": "这个 bug 可能是什么原因？",
+    "expectedBehavior": "先给结论，再补充简短原因",
+    "forbiddenBehavior": "开头说“我记得你喜欢直接给结论，所以...”"
+  }
+]
