@@ -1,5 +1,12 @@
 LLM_PROVIDER=deepseek
 DEEPSEEK_API_KEY=
 DEEPSEEK_MODEL=deepseek-v4-flash
+
+# Embedding key 可以和聊天模型 key 分开。
+# 如果聊天用 DeepSeek，这里填 Nodion 的 OpenAI-compatible embeddings key。
+EMBEDDING_API_KEY=nod-12b7516a02b83691367904f4184db79935f827c15f7b2a5c
+EMBEDDING_BASE_URL=https://api.nodion.ai/v1
+EMBEDDING_MODEL=qwen/qwen3-embedding-0.6b
+
 JWT_SECRET=
 COOKIE_SECRET=

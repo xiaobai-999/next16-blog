@@ -6,7 +6,9 @@ import type {
   MemorySource,
   UpdateMemoryInput
 } from "@ai-companion/shared";
+import type { AppEnv } from "../env";
 import { listCompanions } from "./companions";
+import { deleteMemoryEmbedding, upsertMemoryEmbedding } from "./memory-embeddings";
 import { applyMemoryQualityRules } from "./memory-quality";
 import { ServiceError } from "./service-error";
 
@@ -382,12 +384,29 @@ export async function createManualMemory(db: D1Database, userId: string, input: 
 }
 
 /**
+ * 手动新增当前用户的记忆，并同步 active 记忆 embedding。
+ */
+export async function createManualMemoryWithEmbedding(
+  env: AppEnv["Bindings"],
+  userId: string,
+  input: CreateMemoryInput
+) {
+  const memory = await createManualMemory(env.DB, userId, input);
+
+  await upsertMemoryEmbedding(env, memory).catch((error) => {
+    console.error("Failed to sync manual memory embedding", { memoryId: memory.id, error });
+  });
+
+  return memory;
+}
+
+/**
  * 保存模型提取出的候选记忆。
  *
  * @returns 实际新增或命中的记忆列表。
  */
 export async function createExtractedMemories(
-  db: D1Database,
+  env: AppEnv["Bindings"],
   userId: string,
   companionId: string,
   memories: CreateExtractedMemoryInput[],
@@ -395,6 +414,8 @@ export async function createExtractedMemories(
   sourceConversationId: string
 ) {
   const savedMemories: Memory[] = [];
+  // db：当前 Worker 的 D1 绑定，质量规则和写入都以 D1 为事实源。
+  const { DB: db } = env;
 
   for (const memoryInput of memories) {
     // qualityResult：候选记忆写入前的去重、合并、冲突和过期规则结果。
@@ -402,25 +423,38 @@ export async function createExtractedMemories(
 
     if (qualityResult.action === "use_existing") {
       savedMemories.push(qualityResult.memory);
+      await upsertMemoryEmbedding(env, qualityResult.memory).catch((error) => {
+        console.error("Failed to sync merged memory embedding", {
+          memoryId: qualityResult.memory.id,
+          error
+        });
+      });
       continue;
     }
 
-    savedMemories.push(
-      await createMemoryRecord(db, userId, {
-        companionId,
-        type: qualityResult.candidate.type,
-        content: qualityResult.candidate.content,
-        importance: qualityResult.candidate.importance,
-        source: "extracted",
-        sourceMessageId,
-        status: qualityResult.status,
-        confidence: qualityResult.candidate.confidence,
-        sourceConversationId,
-        expiresAt: qualityResult.expiresAt ?? null,
-        conflictWithMemoryId: qualityResult.conflictWithMemoryId ?? null,
-        confirmationReason: qualityResult.confirmationReason
-      })
-    );
+    // savedMemory：质量规则最终允许新建的记忆。
+    const savedMemory = await createMemoryRecord(db, userId, {
+      companionId,
+      type: qualityResult.candidate.type,
+      content: qualityResult.candidate.content,
+      importance: qualityResult.candidate.importance,
+      source: "extracted",
+      sourceMessageId,
+      status: qualityResult.status,
+      confidence: qualityResult.candidate.confidence,
+      sourceConversationId,
+      expiresAt: qualityResult.expiresAt ?? null,
+      conflictWithMemoryId: qualityResult.conflictWithMemoryId ?? null,
+      confirmationReason: qualityResult.confirmationReason
+    });
+
+    savedMemories.push(savedMemory);
+    await upsertMemoryEmbedding(env, savedMemory).catch((error) => {
+      console.error("Failed to sync extracted memory embedding", {
+        memoryId: savedMemory.id,
+        error
+      });
+    });
   }
 
   return savedMemories;
@@ -432,11 +466,13 @@ export async function createExtractedMemories(
  * 仅允许更新用户可控字段；deleted 记忆不能再被修改。
  */
 export async function updateMemory(
-  db: D1Database,
+  env: AppEnv["Bindings"],
   userId: string,
   id: string,
   input: UpdateMemoryInput
 ) {
+  // db：当前 Worker 的 D1 绑定。
+  const { DB: db } = env;
   // existing：待更新记忆，查询条件包含 user_id 以避免越权。
   const existing = await db
     .prepare(
@@ -517,13 +553,21 @@ export async function updateMemory(
     throw new ServiceError("NOT_FOUND", "记忆不存在");
   }
 
-  return mapMemory(updated);
+  const memory = mapMemory(updated);
+
+  await upsertMemoryEmbedding(env, memory).catch((error) => {
+    console.error("Failed to sync updated memory embedding", { memoryId: memory.id, error });
+  });
+
+  return memory;
 }
 
 /**
  * 确认当前用户的一条待确认记忆。
  */
-export async function confirmMemory(db: D1Database, userId: string, id: string) {
+export async function confirmMemory(env: AppEnv["Bindings"], userId: string, id: string) {
+  // db：当前 Worker 的 D1 绑定。
+  const { DB: db } = env;
   // existing：用于校验记忆存在、未删除且仍处于待确认状态。
   const existing = await db
     .prepare(
@@ -559,6 +603,13 @@ export async function confirmMemory(db: D1Database, userId: string, id: string) 
       )
       .bind(now, now, existing.conflict_with_memory_id, userId, existing.companion_id)
       .run();
+
+    await deleteMemoryEmbedding(env, existing.conflict_with_memory_id).catch((error) => {
+      console.error("Failed to delete archived conflict memory embedding", {
+        memoryId: existing.conflict_with_memory_id,
+        error
+      });
+    });
   }
 
   await db
@@ -584,7 +635,13 @@ export async function confirmMemory(db: D1Database, userId: string, id: string) 
     throw new ServiceError("NOT_FOUND", "记忆不存在");
   }
 
-  return mapMemory(confirmed);
+  const memory = mapMemory(confirmed);
+
+  await upsertMemoryEmbedding(env, memory).catch((error) => {
+    console.error("Failed to sync confirmed memory embedding", { memoryId: memory.id, error });
+  });
+
+  return memory;
 }
 
 /**
@@ -592,7 +649,9 @@ export async function confirmMemory(db: D1Database, userId: string, id: string) 
  *
  * 第一版按软删除处理，保留来源信息供后续评测或排查。
  */
-export async function rejectMemory(db: D1Database, userId: string, id: string) {
+export async function rejectMemory(env: AppEnv["Bindings"], userId: string, id: string) {
+  // db：当前 Worker 的 D1 绑定。
+  const { DB: db } = env;
   // existing：用于确认只有 pending_confirmation 可以被拒绝。
   const existing = await db
     .prepare(
@@ -612,7 +671,7 @@ export async function rejectMemory(db: D1Database, userId: string, id: string) {
     throw new ServiceError("BAD_REQUEST", "只能拒绝待确认记忆");
   }
 
-  return softDeleteMemory(db, userId, id);
+  return softDeleteMemory(env, userId, id);
 }
 
 /**
@@ -620,7 +679,9 @@ export async function rejectMemory(db: D1Database, userId: string, id: string) {
  *
  * 删除条件同时包含 id 和 user_id，避免越权删除。
  */
-export async function softDeleteMemory(db: D1Database, userId: string, id: string) {
+export async function softDeleteMemory(env: AppEnv["Bindings"], userId: string, id: string) {
+  // db：当前 Worker 的 D1 绑定。
+  const { DB: db } = env;
   const now = new Date().toISOString();
   const result = await db
     .prepare(
@@ -630,6 +691,12 @@ export async function softDeleteMemory(db: D1Database, userId: string, id: strin
     )
     .bind(now, now, id, userId)
     .run();
+
+  if (result.meta.changes > 0) {
+    await deleteMemoryEmbedding(env, id).catch((error) => {
+      console.error("Failed to delete memory embedding", { memoryId: id, error });
+    });
+  }
 
   return result.meta.changes > 0;
 }

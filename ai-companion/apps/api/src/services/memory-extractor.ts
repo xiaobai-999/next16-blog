@@ -1,6 +1,6 @@
 import { memoryExtractionResultSchema } from "@ai-companion/shared";
 import type { CandidateMemory } from "@ai-companion/shared";
-import { generateObject } from "ai";
+import { generateText } from "ai";
 import type { AppEnv } from "../env";
 import { createExtractedMemories } from "./memories";
 import { decideMemoryWrite } from "./memory-policy";
@@ -22,6 +22,8 @@ const MEMORY_EXTRACTOR_SYSTEM_PROMPT = [
   "请从用户最新消息和上下文中提取值得长期保存的信息。",
   "只提取用户明确表达的信息，不要猜测。",
   "如果没有值得保存的信息，返回空数组。",
+  "你必须只输出 JSON 对象，不要输出 Markdown、解释、代码块或多余文本。",
+  '输出格式必须是：{"memories":[...]}。',
   "",
   "可用类型：",
   "- profile：用户稳定信息，例如职业、长期目标、身份背景",
@@ -52,6 +54,30 @@ const MEMORY_EXTRACTOR_SYSTEM_PROMPT = [
   "- 模型推断出的性格标签",
   "- 临时情绪碎片"
 ].join("\n");
+
+function stripJsonFence(text: string) {
+  const trimmed = text.trim();
+  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+
+  return fenced?.[1]?.trim() ?? trimmed;
+}
+
+function parseMemoryExtractionText(text: string) {
+  const jsonText = stripJsonFence(text);
+
+  try {
+    return memoryExtractionResultSchema.parse(JSON.parse(jsonText));
+  } catch {
+    const start = jsonText.indexOf("{");
+    const end = jsonText.lastIndexOf("}");
+
+    if (start === -1 || end === -1 || end <= start) {
+      throw new Error("Memory extraction response is not valid JSON");
+    }
+
+    return memoryExtractionResultSchema.parse(JSON.parse(jsonText.slice(start, end + 1)));
+  }
+}
 
 /**
  * 提取可写入日志的错误摘要。
@@ -94,15 +120,13 @@ export async function extractAndStoreMemories(
   let candidateMemories: CandidateMemory[] = [];
 
   try {
-    const result = await generateObject({
+    const result = await generateText({
       model: getChatModel(env),
-      schema: memoryExtractionResultSchema,
-      schemaName: "memory_extraction_result",
       system: MEMORY_EXTRACTOR_SYSTEM_PROMPT,
       prompt,
       temperature: 0
     });
-    candidateMemories = result.object.memories;
+    candidateMemories = parseMemoryExtractionText(result.text).memories;
 
     await createModelLog(env.DB, {
       traceId: input.traceId,
@@ -171,7 +195,7 @@ export async function extractAndStoreMemories(
   }
 
   return createExtractedMemories(
-    env.DB,
+    env,
     input.userId,
     input.companionId,
     memoriesToSave,

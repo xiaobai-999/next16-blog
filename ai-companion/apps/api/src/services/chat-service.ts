@@ -100,15 +100,16 @@ export async function createChatStreamResponse(
   traceId: string,
   waitUntil?: (promise: Promise<unknown>) => void
 ) {
-  // companion：当前用户的伴侣配置，用于新会话归属和 prompt 构建。
-  // systemPrompt：由伴侣配置生成的系统提示词，不保存到消息列表。
-  const { companion, systemPrompt } = await buildChatContext(env.DB, userId);
   // userMessageContent：本次请求中新发送的用户消息正文。
   const userMessageContent = latestUserMessageText(input);
 
   if (!userMessageContent) {
     throw new ServiceError("BAD_REQUEST", "消息不能为空");
   }
+
+  // companion：当前用户的伴侣配置，用于新会话归属和 prompt 构建。
+  // systemPrompt：由伴侣配置和语义召回记忆生成的系统提示词，不保存到消息列表。
+  const { companion, systemPrompt } = await buildChatContext(env, userId, userMessageContent);
 
   const conversation =
     input.conversationId !== undefined

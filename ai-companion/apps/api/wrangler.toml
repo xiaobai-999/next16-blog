@@ -2,8 +2,16 @@ name = "ai-companion-api"
 main = "src/index.ts"
 compatibility_date = "2026-05-22"
 
+[vars]
+EMBEDDING_BASE_URL = "https://api.nodion.ai/v1"
+EMBEDDING_MODEL = "qwen/qwen3-embedding-0.6b"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "ai-companion"
 database_id = "00000000-0000-0000-0000-000000000000"
 migrations_dir = "../../packages/database/migrations"
+
+[[vectorize]]
+binding = "MEMORY_VECTORIZE"
+index_name = "ai-companion-memories"

@@ -1,6 +1,11 @@
 export type AppEnv = {
   Bindings: {
     DB: D1Database;
+    MEMORY_VECTORIZE?: VectorizeIndex;
+    EMBEDDING_PROVIDER?: "openai";
+    EMBEDDING_MODEL?: string;
+    EMBEDDING_API_KEY?: string;
+    EMBEDDING_BASE_URL?: string;
     LLM_PROVIDER?: "openai" | "deepseek";
     LLM_API_KEY?: string;
     LLM_BASE_URL?: string;

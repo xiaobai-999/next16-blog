@@ -11,7 +11,7 @@ import type { AppEnv } from "../env";
 import { authMiddleware } from "../middleware/auth";
 import {
   confirmMemory,
-  createManualMemory,
+  createManualMemoryWithEmbedding,
   listMemories,
   rejectMemory,
   softDeleteMemory,
@@ -64,7 +64,7 @@ export const memoriesRoute = new Hono<AppEnv>()
 
     try {
       // 手动新增记忆默认绑定当前用户的默认伴侣。
-      const memory = await createManualMemory(c.env.DB, c.get("currentUser").id, body.data);
+      const memory = await createManualMemoryWithEmbedding(c.env, c.get("currentUser").id, body.data);
 
       return c.json<MemoryResponse>({ memory }, 201);
     } catch (error) {
@@ -85,7 +85,7 @@ export const memoriesRoute = new Hono<AppEnv>()
     try {
       // memoryId：路由中的记忆 ID，更新时服务层会同时校验当前 user_id。
       const memoryId = c.req.param("id");
-      const memory = await updateMemory(c.env.DB, c.get("currentUser").id, memoryId, body.data);
+      const memory = await updateMemory(c.env, c.get("currentUser").id, memoryId, body.data);
 
       return c.json<MemoryResponse>({ memory });
     } catch (error) {
@@ -99,7 +99,7 @@ export const memoriesRoute = new Hono<AppEnv>()
   .delete("/:id", async (c) => {
     // memoryId：路由中的记忆 ID，删除时还会同时校验当前 user_id。
     const memoryId = c.req.param("id");
-    const deleted = await softDeleteMemory(c.env.DB, c.get("currentUser").id, memoryId);
+    const deleted = await softDeleteMemory(c.env, c.get("currentUser").id, memoryId);
 
     if (!deleted) {
       return apiError(c, "NOT_FOUND", "记忆不存在");
@@ -111,7 +111,7 @@ export const memoriesRoute = new Hono<AppEnv>()
     try {
       // memoryId：待确认记忆 ID，服务层会限制只能确认自己的 pending 记忆。
       const memoryId = c.req.param("id");
-      const memory = await confirmMemory(c.env.DB, c.get("currentUser").id, memoryId);
+      const memory = await confirmMemory(c.env, c.get("currentUser").id, memoryId);
 
       return c.json<MemoryResponse>({ memory });
     } catch (error) {
@@ -126,7 +126,7 @@ export const memoriesRoute = new Hono<AppEnv>()
     try {
       // memoryId：待拒绝记忆 ID，拒绝后按软删除处理。
       const memoryId = c.req.param("id");
-      const deleted = await rejectMemory(c.env.DB, c.get("currentUser").id, memoryId);
+      const deleted = await rejectMemory(c.env, c.get("currentUser").id, memoryId);
 
       if (!deleted) {
         return apiError(c, "NOT_FOUND", "记忆不存在");

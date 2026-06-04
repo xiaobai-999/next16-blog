@@ -1,4 +1,6 @@
 import type { CandidateMemory, Memory, MemoryStatus, MemorySource } from "@ai-companion/shared";
+import type { AppEnv } from "../env";
+import { deleteMemoryEmbedding } from "./memory-embeddings";
 
 type MemoryRow = {
   // id：D1 中的记忆 ID。
@@ -438,8 +440,24 @@ export function inferMemoryExpiresAt(candidate: CandidateMemory, now = new Date(
  *
  * 预留给后续 cron/debug 使用；聊天上下文读取仍会实时过滤过期记忆。
  */
-export async function archiveExpiredMemories(db: D1Database, now = new Date().toISOString()) {
-  const result = await db
+export async function archiveExpiredMemories(
+  env: AppEnv["Bindings"],
+  now = new Date().toISOString()
+) {
+  // expiredRows：本次会被归档的记忆 ID，用于同步删除向量。
+  const expiredRows = await env.DB.prepare(
+    `SELECT id
+     FROM memories
+     WHERE status = 'active'
+       AND deleted_at IS NULL
+       AND archived_at IS NULL
+       AND expires_at IS NOT NULL
+       AND expires_at <= ?`
+  )
+    .bind(now)
+    .all<{ id: string }>();
+
+  const result = await env.DB
     .prepare(
       `UPDATE memories
        SET status = 'archived', archived_at = ?, updated_at = ?
@@ -451,6 +469,12 @@ export async function archiveExpiredMemories(db: D1Database, now = new Date().to
     )
     .bind(now, now, now)
     .run();
+
+  for (const row of expiredRows.results) {
+    await deleteMemoryEmbedding(env, row.id).catch((error) => {
+      console.error("Failed to delete expired memory embedding", { memoryId: row.id, error });
+    });
+  }
 
   return result.meta.changes;
 }
