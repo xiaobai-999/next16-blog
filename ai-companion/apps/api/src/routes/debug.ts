@@ -2,7 +2,7 @@ import { type ModelLogsResponse } from "@ai-companion/shared";
 import { Hono } from "hono";
 import type { AppEnv } from "../env";
 import { authMiddleware } from "../middleware/auth";
-import { listModelLogs } from "../services/model-logs";
+import { getDebugMetrics, listModelLogs, listModelLogsByTraceId } from "../services/model-logs";
 import { apiError } from "../utils/errors";
 
 /**
@@ -32,6 +32,21 @@ function readLimit(value: string | undefined) {
 }
 
 /**
+ * 解析 metrics 时间窗口。
+ *
+ * hours 限制在 1-168 小时，避免本地误查过大范围。
+ */
+function readHours(value: string | undefined) {
+  const hours = Number(value ?? 24);
+
+  if (!Number.isFinite(hours)) {
+    return 24;
+  }
+
+  return Math.min(168, Math.max(1, Math.trunc(hours)));
+}
+
+/**
  * 本地调试路由。
  *
  * 只暴露模型调用日志，不返回 prompt 明文。
@@ -49,4 +64,28 @@ export const debugRoute = new Hono<AppEnv>()
     const logs = await listModelLogs(c.env.DB, limit);
 
     return c.json<ModelLogsResponse>({ logs });
+  })
+  .get("/model-logs/:traceId", async (c) => {
+    if (!isLocalDebugRequest(c.req.raw)) {
+      return apiError(c, "FORBIDDEN", "debug 接口仅允许本地访问");
+    }
+
+    // traceId：聊天响应头返回的链路 ID，用于定位单次请求。
+    const traceId = c.req.param("traceId");
+    // logs：该 trace 下的模型调用日志，按时间正序返回。
+    const logs = await listModelLogsByTraceId(c.env.DB, traceId);
+
+    return c.json<ModelLogsResponse>({ logs });
+  })
+  .get("/metrics", async (c) => {
+    if (!isLocalDebugRequest(c.req.raw)) {
+      return apiError(c, "FORBIDDEN", "debug 接口仅允许本地访问");
+    }
+
+    // hours：统计窗口，默认最近 24 小时。
+    const hours = readHours(c.req.query("hours"));
+    // metrics：MVP 试运行需要观察的聚合指标。
+    const metrics = await getDebugMetrics(c.env.DB, hours);
+
+    return c.json({ metrics });
   });

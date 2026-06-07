@@ -1,0 +1,9 @@
+{
+  "name": "@ai-companion/evals",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "memory:eval": "node memory/run-memory-evals.mjs"
+  }
+}

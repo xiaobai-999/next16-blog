@@ -30,6 +30,29 @@ type CreateModelLogInput = {
   errorMessage?: string | null;
 };
 
+export type DebugMetrics = {
+  windowHours: number;
+  since: string;
+  modelLogs: {
+    total: number;
+    success: number;
+    error: number;
+    averageLatencyMs: number | null;
+  };
+  memories: {
+    active: number;
+    pendingConfirmation: number;
+    archived: number;
+    deleted: number;
+  };
+  feedback: {
+    up: number;
+    down: number;
+    memoryError: number;
+    personaMismatch: number;
+  };
+};
+
 /**
  * 将 D1 的 snake_case 模型日志行转换成共享 ModelLog 类型。
  */
@@ -128,4 +151,130 @@ export async function listModelLogs(db: D1Database, limit = 50) {
     .all<ModelLogRow>();
 
   return result.results.map(mapModelLog);
+}
+
+/**
+ * 按 trace_id 读取一次请求链路相关模型日志。
+ */
+export async function listModelLogsByTraceId(db: D1Database, traceId: string) {
+  const result = await db
+    .prepare(
+      `SELECT id, trace_id, user_id, conversation_id, provider, model, prompt_tokens, completion_tokens, latency_ms, status, error_code, error_message, created_at
+       FROM model_logs
+       WHERE trace_id = ?
+       ORDER BY created_at ASC`
+    )
+    .bind(traceId)
+    .all<ModelLogRow>();
+
+  return result.results.map(mapModelLog);
+}
+
+type CountRow = {
+  count: number;
+};
+
+type ModelLogMetricsRow = {
+  total: number;
+  success: number;
+  error: number;
+  average_latency_ms: number | null;
+};
+
+/**
+ * 读取最近一段时间的 MVP 调试指标。
+ *
+ * 指标只用于本地 debug，不包含 prompt 明文和消息正文。
+ */
+export async function getDebugMetrics(db: D1Database, windowHours = 24): Promise<DebugMetrics> {
+  const since = new Date(Date.now() - windowHours * 60 * 60 * 1000).toISOString();
+
+  const modelLogs = await db
+    .prepare(
+      `SELECT
+         COUNT(*) AS total,
+         SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS success,
+         SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) AS error,
+         AVG(latency_ms) AS average_latency_ms
+       FROM model_logs
+       WHERE created_at >= ?`
+    )
+    .bind(since)
+    .first<ModelLogMetricsRow>();
+
+  const activeMemories = await countRows(
+    db,
+    "SELECT COUNT(*) AS count FROM memories WHERE status = 'active' AND created_at >= ?",
+    since
+  );
+  const pendingMemories = await countRows(
+    db,
+    "SELECT COUNT(*) AS count FROM memories WHERE status = 'pending_confirmation' AND created_at >= ?",
+    since
+  );
+  const archivedMemories = await countRows(
+    db,
+    "SELECT COUNT(*) AS count FROM memories WHERE status = 'archived' AND updated_at >= ?",
+    since
+  );
+  const deletedMemories = await countRows(
+    db,
+    "SELECT COUNT(*) AS count FROM memories WHERE status = 'deleted' AND updated_at >= ?",
+    since
+  );
+  const upFeedback = await countRows(
+    db,
+    "SELECT COUNT(*) AS count FROM feedback WHERE rating = 'up' AND created_at >= ?",
+    since
+  );
+  const downFeedback = await countRows(
+    db,
+    "SELECT COUNT(*) AS count FROM feedback WHERE rating = 'down' AND created_at >= ?",
+    since
+  );
+  const memoryErrorFeedback = await countRows(
+    db,
+    "SELECT COUNT(*) AS count FROM feedback WHERE rating = 'down' AND reason = '[memory_error]' AND created_at >= ?",
+    since
+  );
+  const personaMismatchFeedback = await countRows(
+    db,
+    "SELECT COUNT(*) AS count FROM feedback WHERE rating = 'down' AND reason = '[persona_mismatch]' AND created_at >= ?",
+    since
+  );
+
+  return {
+    windowHours,
+    since,
+    modelLogs: {
+      total: modelLogs?.total ?? 0,
+      success: modelLogs?.success ?? 0,
+      error: modelLogs?.error ?? 0,
+      averageLatencyMs:
+        modelLogs?.average_latency_ms === null || modelLogs?.average_latency_ms === undefined
+          ? null
+          : Math.round(modelLogs.average_latency_ms)
+    },
+    memories: {
+      active: activeMemories,
+      pendingConfirmation: pendingMemories,
+      archived: archivedMemories,
+      deleted: deletedMemories
+    },
+    feedback: {
+      up: upFeedback,
+      down: downFeedback,
+      memoryError: memoryErrorFeedback,
+      personaMismatch: personaMismatchFeedback
+    }
+  };
+}
+
+/**
+ * 执行单值 COUNT 查询。
+ */
+async function countRows(db: D1Database, sql: string, since: string) {
+  const row = await db.prepare(sql).bind(since).first<CountRow>();
+
+  return row?.count ?? 0;
 }

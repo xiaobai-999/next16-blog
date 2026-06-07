@@ -25,4 +25,16 @@
 
 ## Usage
 
-第一版先作为人工验收清单。后续可以新增 `run-memory-evals.ts`，读取这些 JSON case 后调用 extractor、retriever、context-builder 或模型接口，并输出 pass/fail。
+第一版已经提供半自动 runner：
+
+```bash
+pnpm memory:eval
+```
+
+runner 会读取这些 JSON case，先执行确定性检查，并把需要模型或人工判断的用例标记为 `manual`。最新结果写入：
+
+```text
+packages/evals/memory/results/latest.json
+```
+
+`results/` 是运行产物，不提交到仓库。

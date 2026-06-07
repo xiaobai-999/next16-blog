@@ -8,5 +8,6 @@ dist
 .env
 .env.local
 *.log
+packages/evals/memory/results/
 
 aicompanion.usehook.cn

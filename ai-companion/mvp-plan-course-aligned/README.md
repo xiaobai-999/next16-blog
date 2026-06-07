@@ -1,6 +1,6 @@
 # AI Companion MVP 执行计划（小册 001-136 对齐版）
 
-本文档集用于把 AI Companion 第一版和 V1 记忆增强拆成 12 个可执行阶段，并对齐 `aicompanion.usehook.cn` 导出的 001-136 章内容。
+本文档集用于把 AI Companion 第一版、V1 记忆增强和 MVP Release Candidate 收口拆成 13 个可执行阶段，并对齐 `aicompanion.usehook.cn` 导出的 001-136 章内容。
 
 第一版目标是验证：
 
@@ -64,6 +64,7 @@
 10. [阶段 10：V1 记忆质量规则](./10-v1-memory-quality-rules.md)
 11. [阶段 11：V1 语义记忆召回](./11-v1-semantic-memory-retrieval.md)
 12. [阶段 12：V1 记忆使用策略和评测集](./12-v1-memory-usage-and-evaluation.md)
+13. [阶段 13：MVP Release Candidate 和上线验收](./13-mvp-release-candidate-and-verification.md)
 
 ## 全局工程约定
 

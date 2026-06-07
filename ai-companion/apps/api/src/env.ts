@@ -9,6 +9,7 @@ export type AppEnv = {
     LLM_PROVIDER?: "openai" | "deepseek";
     LLM_API_KEY?: string;
     LLM_BASE_URL?: string;
+    LLM_TIMEOUT_MS?: string;
     OPENAI_API_KEY?: string;
     OPENAI_MODEL?: string;
     DEEPSEEK_API_KEY?: string;
