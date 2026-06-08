@@ -2,6 +2,8 @@
 
 本文档集用于把 AI Companion 第一版、V1 记忆增强和 MVP Release Candidate 收口拆成 13 个可执行阶段，并对齐 `aicompanion.usehook.cn` 导出的 001-136 章内容。
 
+阶段 13 验收已通过。V2 从阶段 14 开始，进入文字 Agent 编排、显式状态、条件路由、LangGraph、HITL 和可观测发布。
+
 第一版目标是验证：
 
 > 用户是否愿意持续和一个有基础人格、有聊天记忆、能稳定陪伴的 AI 角色互动。
@@ -65,6 +67,16 @@
 11. [阶段 11：V1 语义记忆召回](./11-v1-semantic-memory-retrieval.md)
 12. [阶段 12：V1 记忆使用策略和评测集](./12-v1-memory-usage-and-evaluation.md)
 13. [阶段 13：MVP Release Candidate 和上线验收](./13-mvp-release-candidate-and-verification.md)
+
+## V2 Agent 编排阶段
+
+- [V2 总览：文字 Agent 编排版](./v2-agent-orchestration-overview.md)
+- [阶段 14：V2 Agent 状态与 Trace 基座](./14-v2-agent-state-and-trace.md)
+- [阶段 15：V2 意图、情绪与风险分类](./15-v2-intent-emotion-risk-classification.md)
+- [阶段 16：V2 回复策略与安全路由](./16-v2-response-strategy-routing.md)
+- [阶段 17：V2 LangGraph 工作流迁移](./17-v2-langgraph-workflow.md)
+- [阶段 18：V2 内部工具与 Human-in-the-loop](./18-v2-internal-tools-and-hitl.md)
+- [阶段 19：V2 Agent 评测、可观测性与发布](./19-v2-agent-evaluation-and-observability.md)
 
 ## 全局工程约定
 
