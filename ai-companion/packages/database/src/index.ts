@@ -6,6 +6,8 @@ export const tables = [
   "conversations",
   "messages",
   "memories",
+  "agent_runs",
+  "agent_spans",
   "model_logs",
   "feedback"
 ] as const;

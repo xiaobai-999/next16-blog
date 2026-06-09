@@ -1,5 +1,6 @@
 import { type ModelLogsResponse } from "@ai-companion/shared";
 import { Hono } from "hono";
+import { getAgentTraceByTraceId } from "../agent/trace-service";
 import type { AppEnv } from "../env";
 import { authMiddleware } from "../middleware/auth";
 import { getDebugMetrics, listModelLogs, listModelLogsByTraceId } from "../services/model-logs";
@@ -76,6 +77,22 @@ export const debugRoute = new Hono<AppEnv>()
     const logs = await listModelLogsByTraceId(c.env.DB, traceId);
 
     return c.json<ModelLogsResponse>({ logs });
+  })
+  .get("/agent-traces/:traceId", async (c) => {
+    if (!isLocalDebugRequest(c.req.raw)) {
+      return apiError(c, "FORBIDDEN", "debug 接口仅允许本地访问");
+    }
+
+    // traceId：聊天响应头返回的链路 ID，用于读取 Agent run 和节点状态。
+    const traceId = c.req.param("traceId");
+    // trace：该 trace 下的一轮 Agent 执行摘要和 span 列表。
+    const trace = await getAgentTraceByTraceId(c.env.DB, traceId);
+
+    if (!trace) {
+      return apiError(c, "NOT_FOUND", "Trace 不存在");
+    }
+
+    return c.json({ trace });
   })
   .get("/metrics", async (c) => {
     if (!isLocalDebugRequest(c.req.raw)) {

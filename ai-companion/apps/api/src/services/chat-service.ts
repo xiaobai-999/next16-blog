@@ -1,5 +1,8 @@
 import type { ChatRequest, ChatRequestMessage } from "@ai-companion/shared";
 import { streamText, type UIMessage } from "ai";
+import { threadIdFromConversationId } from "../agent/agent-context";
+import type { AgentTraceStatus } from "../agent/agent-state";
+import { createTraceService, getAgentTraceConfig } from "../agent/trace-service";
 import type { AppEnv } from "../env";
 import { buildChatContext } from "./context-builder";
 import {
@@ -98,8 +101,11 @@ export async function createChatStreamResponse(
   userId: string,
   input: ChatRequest,
   traceId: string,
+  requestId: string,
   waitUntil?: (promise: Promise<unknown>) => void
 ) {
+  // agentStartedAt：本轮请求进入聊天服务的时间，用于 Agent run 端到端耗时。
+  const agentStartedAt = new Date().toISOString();
   // userMessageContent：本次请求中新发送的用户消息正文。
   const userMessageContent = latestUserMessageText(input);
 
@@ -138,8 +144,71 @@ export async function createChatStreamResponse(
     input.messages?.every(hasUiParts) === true ? (input.messages as UIMessage[]) : undefined;
   // modelInfo：当前聊天调用实际使用的模型供应商和模型名，用于日志定位。
   const modelInfo = getModelProviderInfo(env);
+  // traceService：Agent Trace 写入服务，失败时只降级为本地日志。
+  const traceService = createTraceService(env.DB, getAgentTraceConfig(env));
+  // threadId：同一 conversation 多轮请求稳定使用同一个线程 ID。
+  const threadId = threadIdFromConversationId(conversation.id);
+  let agentTraceRecorded = false;
+
+  const scheduleAgentTrace = (input: {
+    status: AgentTraceStatus;
+    spanStatus?: AgentTraceStatus;
+    degradedReason?: string | null;
+    errorCode?: string | null;
+    errorMessage?: string | null;
+    outputSummary?: string | null;
+  }) => {
+    if (agentTraceRecorded) {
+      return;
+    }
+
+    agentTraceRecorded = true;
+
+    const endedAt = new Date().toISOString();
+    const traceWrite = traceService
+      .recordTrace({
+        run: {
+          traceId,
+          requestId,
+          userId,
+          companionId: companion.id,
+          conversationId: conversation.id,
+          threadId,
+          graphPath: ["v1_chat_stream"],
+          status: input.status,
+          degradedReason: input.degradedReason ?? null,
+          startedAt: agentStartedAt,
+          endedAt
+        },
+        spans: [
+          {
+            traceId,
+            nodeName: "v1_chat_stream",
+            status: input.spanStatus ?? input.status,
+            model: modelInfo.model,
+            inputSummary: `user_message_chars=${userMessageContent.length};model_messages=${messages.length}`,
+            outputSummary: input.outputSummary ?? null,
+            errorCode: input.errorCode ?? null,
+            errorMessage: input.errorMessage ?? null,
+            startedAt: modelStartedAtIso,
+            endedAt
+          }
+        ]
+      })
+      .catch((error) => {
+        console.error("Failed to write agent trace", { traceId, requestId, error });
+      });
+
+    if (waitUntil) {
+      waitUntil(traceWrite);
+    } else {
+      void traceWrite;
+    }
+  };
+
   // modelStartedAt：模型流式调用开始时间，用于计算端到端耗时。
   const modelStartedAt = Date.now();
+  const modelStartedAtIso = new Date(modelStartedAt).toISOString();
   let model: ReturnType<typeof getChatModel>;
 
   try {
@@ -159,6 +228,13 @@ export async function createChatStreamResponse(
       errorMessage: summary.message
     }).catch((logError) => {
       console.error("Failed to write model log", { traceId, error: logError });
+    });
+
+    scheduleAgentTrace({
+      status: "error",
+      errorCode: summary.code,
+      errorMessage: summary.message,
+      outputSummary: "model_provider_initialization_failed"
     });
 
     throw error;
@@ -202,17 +278,32 @@ export async function createChatStreamResponse(
       }).catch((error) => {
         console.error("Failed to write model log", { traceId, error });
       });
+
+      scheduleAgentTrace({
+        status: "error",
+        errorCode: summary.code,
+        errorMessage: summary.message,
+        outputSummary: "model_stream_failed"
+      });
     }
   });
 
   return result.toUIMessageStreamResponse({
     headers: {
       "X-Conversation-Id": conversation.id,
-      "X-Trace-Id": traceId
+      "X-Trace-Id": traceId,
+      "X-Request-Id": requestId
     },
     originalMessages,
     async onFinish(event) {
       if (event.isAborted) {
+        scheduleAgentTrace({
+          status: "degraded",
+          spanStatus: "degraded",
+          degradedReason: "stream_aborted",
+          outputSummary: "stream_aborted"
+        });
+
         return;
       }
 
@@ -220,6 +311,13 @@ export async function createChatStreamResponse(
       const assistantContent = uiMessageContent(event.responseMessage);
 
       if (!assistantContent) {
+        scheduleAgentTrace({
+          status: "degraded",
+          spanStatus: "degraded",
+          degradedReason: "empty_assistant_content",
+          outputSummary: "assistant_message_chars=0"
+        });
+
         return;
       }
 
@@ -248,8 +346,24 @@ export async function createChatStreamResponse(
         } else {
           void memoryExtraction;
         }
+
+        scheduleAgentTrace({
+          status: "ok",
+          outputSummary: `assistant_message_chars=${assistantContent.length}`
+        });
       } catch (error) {
         console.error("Failed to persist assistant message", { traceId, error });
+
+        const summary = errorSummary(error);
+
+        scheduleAgentTrace({
+          status: "degraded",
+          spanStatus: "degraded",
+          degradedReason: "assistant_message_persist_failed",
+          errorCode: summary.code,
+          errorMessage: summary.message,
+          outputSummary: `assistant_message_chars=${assistantContent.length}`
+        });
       }
     },
     onError() {
