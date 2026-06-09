@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "classification:eval": "node classification/run-classification-evals.mjs",
     "memory:eval": "node memory/run-memory-evals.mjs"
   }
 }

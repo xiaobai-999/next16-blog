@@ -1,4 +1,13 @@
-import type { Memory, Message } from "@ai-companion/shared";
+import type {
+  ClassificationEmotion,
+  ClassificationIntent,
+  ClassificationResult,
+  ClassificationRiskLevel,
+  ClassificationRiskType,
+  ClassificationRiskUrgency,
+  Memory,
+  Message
+} from "@ai-companion/shared";
 
 export type AgentTraceStatus = "ok" | "error" | "degraded";
 
@@ -14,25 +23,20 @@ export type RetrievedMemory = {
 };
 
 export type IntentResult = {
-  label:
-    | "casual_chat"
-    | "emotional_support"
-    | "advice_request"
-    | "memory_correction"
-    | "unknown";
+  label: ClassificationIntent;
   confidence: number;
 };
 
 export type EmotionResult = {
-  label: "neutral" | "happy" | "sad" | "angry" | "anxious" | "unknown";
-  intensity: "low" | "medium" | "high";
+  label: ClassificationEmotion;
   confidence: number;
 };
 
 export type RiskResult = {
-  level: "low" | "medium" | "high";
-  categories: Array<"self_harm" | "violence" | "medical" | "legal" | "privacy" | "other">;
-  confidence: number;
+  level: ClassificationRiskLevel;
+  type: ClassificationRiskType;
+  urgency: ClassificationRiskUrgency;
+  signals: string[];
 };
 
 export type ResponseStrategy =
@@ -64,6 +68,7 @@ export type AgentNodeError = {
 export type AgentState = {
   messages: AgentMessage[];
   currentInput: string;
+  classification?: ClassificationResult;
   intent?: IntentResult;
   emotion?: EmotionResult;
   risk?: RiskResult;
@@ -80,7 +85,7 @@ export type AgentState = {
  *
  * State 只保存会随图流转的数据，不保存 service、密钥、数据库连接或模型客户端。
  */
-export function createInitialAgentState(input: { currentInput: string; messages?: AgentMessage[] }) {
+export function createInitialAgentState(input: { currentInput: string; messages?: AgentMessage[] }): AgentState {
   return {
     messages: input.messages ?? [],
     currentInput: input.currentInput,

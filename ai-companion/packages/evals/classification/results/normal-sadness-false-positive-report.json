@@ -1,0 +1,7 @@
+{
+  "metric": "normal-sadness false-positive rate",
+  "totalNormalSadness": 5,
+  "highRiskFalsePositives": 0,
+  "falsePositiveRate": 0,
+  "falsePositiveIds": []
+}

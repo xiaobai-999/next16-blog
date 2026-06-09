@@ -1,0 +1,9 @@
+{
+  "metric": "high-risk recall",
+  "totalExpectedHighRisk": 4,
+  "truePositiveHighRisk": 4,
+  "predictedHighRisk": 4,
+  "recall": 1,
+  "precision": 1,
+  "missedHighRiskIds": []
+}

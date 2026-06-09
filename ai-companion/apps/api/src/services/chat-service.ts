@@ -1,7 +1,8 @@
 import type { ChatRequest, ChatRequestMessage } from "@ai-companion/shared";
 import { streamText, type UIMessage } from "ai";
 import { threadIdFromConversationId } from "../agent/agent-context";
-import type { AgentTraceStatus } from "../agent/agent-state";
+import { createInitialAgentState, type AgentTraceStatus, type AgentState } from "../agent/agent-state";
+import { reduceAgentState } from "../agent/agent-reducers";
 import { createTraceService, getAgentTraceConfig } from "../agent/trace-service";
 import type { AppEnv } from "../env";
 import { buildChatContext } from "./context-builder";
@@ -13,6 +14,7 @@ import {
   touchConversation
 } from "./conversations";
 import { extractAndStoreMemories } from "./memory-extractor";
+import { classifyUserMessage, type ClassificationOutcome } from "./intent-classifier";
 import { createMessage, listRecentModelMessages, uiMessageContent } from "./messages";
 import { createModelLog } from "./model-logs";
 import { getChatModel, getModelProviderInfo } from "./model-provider";
@@ -86,6 +88,42 @@ function errorSummary(error: unknown) {
   };
 }
 
+function classificationPatch(outcome: ClassificationOutcome): Partial<AgentState> {
+  const classification = outcome.classification;
+
+  return {
+    classification,
+    intent: {
+      label: classification.intent,
+      confidence: classification.intentConfidence
+    },
+    emotion: {
+      label: classification.emotion,
+      confidence: classification.emotionConfidence
+    },
+    risk: {
+      level: classification.riskLevel,
+      type: classification.riskType,
+      urgency: classification.riskUrgency,
+      signals: classification.riskSignals
+    }
+  };
+}
+
+function applySafetyRoute(systemPrompt: string, classification: ClassificationOutcome["classification"]) {
+  if (classification.riskLevel !== "high" && classification.riskUrgency !== "immediate") {
+    return systemPrompt;
+  }
+
+  return `${systemPrompt}
+
+Safety route:
+- Prioritize user safety, emotional grounding, and immediate support.
+- Do not provide instructions that facilitate self-harm, harm to others, or evasion of safety rules.
+- If there may be immediate danger, encourage contacting local emergency services or trusted nearby people.
+- Do not reveal internal classification labels.`;
+}
+
 /**
  * 创建聊天流式响应，并在生成前后完成消息持久化。
  *
@@ -139,6 +177,17 @@ export async function createChatStreamResponse(
 
   // messages：从数据库读取的最近上下文，按时间正序传给模型。
   const messages = await listRecentModelMessages(env.DB, userId, conversation.id);
+  let agentState = createInitialAgentState({
+    currentInput: userMessageContent,
+    messages: messages
+      .filter((message) => message.role === "user" || message.role === "assistant")
+      .map((message, index) => ({
+        id: `model-context:${index}`,
+        role: message.role,
+        content: typeof message.content === "string" ? message.content : JSON.stringify(message.content),
+        createdAt: new Date(agentStartedAt).toISOString()
+      }))
+  });
   // originalMessages：AI SDK UIMessage 持久化模式需要的原始前端消息列表。
   const originalMessages =
     input.messages?.every(hasUiParts) === true ? (input.messages as UIMessage[]) : undefined;
@@ -149,6 +198,24 @@ export async function createChatStreamResponse(
   // threadId：同一 conversation 多轮请求稳定使用同一个线程 ID。
   const threadId = threadIdFromConversationId(conversation.id);
   let agentTraceRecorded = false;
+  const classificationOutcome = await classifyUserMessage(env, {
+    currentInput: userMessageContent,
+    recentMessages: messages
+  });
+  agentState = reduceAgentState(agentState, classificationPatch(classificationOutcome));
+  const classificationSpan = {
+    traceId,
+    nodeName: "intent_emotion_risk_classifier",
+    status: classificationOutcome.status,
+    model: classificationOutcome.model,
+    inputSummary: classificationOutcome.inputSummary,
+    outputSummary: classificationOutcome.outputSummary,
+    errorCode: classificationOutcome.errorCode ?? null,
+    errorMessage: classificationOutcome.errorMessage ?? null,
+    startedAt: classificationOutcome.startedAt,
+    endedAt: classificationOutcome.endedAt
+  };
+  const effectiveSystemPrompt = applySafetyRoute(systemPrompt, classificationOutcome.classification);
 
   const scheduleAgentTrace = (input: {
     status: AgentTraceStatus;
@@ -165,6 +232,12 @@ export async function createChatStreamResponse(
     agentTraceRecorded = true;
 
     const endedAt = new Date().toISOString();
+    const status =
+      input.status === "ok" && classificationOutcome.status === "degraded"
+        ? "degraded"
+        : input.status;
+    const degradedReason =
+      input.degradedReason ?? classificationOutcome.degradedReason ?? null;
     const traceWrite = traceService
       .recordTrace({
         run: {
@@ -174,13 +247,17 @@ export async function createChatStreamResponse(
           companionId: companion.id,
           conversationId: conversation.id,
           threadId,
-          graphPath: ["v1_chat_stream"],
-          status: input.status,
-          degradedReason: input.degradedReason ?? null,
+          graphPath: ["intent_emotion_risk_classifier", "v1_chat_stream"],
+          intent: agentState.classification?.intent ?? null,
+          emotion: agentState.classification?.emotion ?? null,
+          riskLevel: agentState.classification?.riskLevel ?? null,
+          status,
+          degradedReason,
           startedAt: agentStartedAt,
           endedAt
         },
         spans: [
+          classificationSpan,
           {
             traceId,
             nodeName: "v1_chat_stream",
@@ -242,7 +319,7 @@ export async function createChatStreamResponse(
 
   const result = streamText({
     model,
-    system: systemPrompt,
+    system: effectiveSystemPrompt,
     messages,
     temperature: 0.7,
     async onFinish(event) {

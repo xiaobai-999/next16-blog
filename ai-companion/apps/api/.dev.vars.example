@@ -2,6 +2,7 @@ LLM_PROVIDER=deepseek
 DEEPSEEK_API_KEY=
 DEEPSEEK_MODEL=deepseek-v4-flash
 LLM_TIMEOUT_MS=60000
+CLASSIFICATION_TIMEOUT_MS=8000
 
 # Embedding key 可以和聊天模型 key 分开。
 # 如果聊天用 DeepSeek，这里填 Nodion 的 OpenAI-compatible embeddings key。
