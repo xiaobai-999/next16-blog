@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "classification:eval": "node classification/run-classification-evals.mjs",
-    "memory:eval": "node memory/run-memory-evals.mjs"
+    "memory:eval": "node memory/run-memory-evals.mjs",
+    "strategy:eval": "node strategy/run-strategy-evals.mjs"
   }
 }

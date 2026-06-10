@@ -12,7 +12,8 @@
     "format": "prettier --write .",
     "db:migrate:local": "pnpm --filter @ai-companion/api db:migrate:local",
     "classification:eval": "pnpm --filter @ai-companion/evals classification:eval",
-    "memory:eval": "pnpm --filter @ai-companion/evals memory:eval"
+    "memory:eval": "pnpm --filter @ai-companion/evals memory:eval",
+    "strategy:eval": "pnpm --filter @ai-companion/evals strategy:eval"
   },
   "devDependencies": {
     "@ai-companion/config": "workspace:*",

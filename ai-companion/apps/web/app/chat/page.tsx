@@ -57,7 +57,7 @@ export default function ChatPage() {
   const [feedbackByMessage, setFeedbackByMessage] = useState<Record<string, FeedbackRating>>({});
   // pendingFeedbackMessageId：正在提交反馈的消息 ID，用于禁用重复点击。
   const [pendingFeedbackMessageId, setPendingFeedbackMessageId] = useState<string | null>(null);
-  // openFeedbackMessageId：当前打开消息操作菜单的 assistant 消息 ID。
+  // openFeedbackMessageId：当前打开反馈菜单的 assistant 消息 ID。
   const [openFeedbackMessageId, setOpenFeedbackMessageId] = useState<string | null>(null);
   // feedbackError：反馈提交失败时的轻量提示。
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
@@ -65,6 +65,8 @@ export default function ChatPage() {
   const [memoryCorrectionMessageId, setMemoryCorrectionMessageId] = useState<string | null>(null);
   // responseConversationIdRef：保存本次流式响应头里的会话 ID，避免依赖会话列表最新项。
   const responseConversationIdRef = useRef<string | null>(null);
+  // messageListRef：聊天内容容器，用于在历史加载和新消息产生后保持底部可见。
+  const messageListRef = useRef<HTMLDivElement | null>(null);
   // transport：AI SDK 聊天传输层，负责把当前 conversationId 带给后端。
   const transport = useMemo(
     () =>
@@ -103,6 +105,16 @@ export default function ChatPage() {
   });
   // isSending：AI SDK 当前是否正在提交或接收流式回复。
   const isSending = status === "submitted" || status === "streaming";
+
+  useEffect(() => {
+    const messageList = messageListRef.current;
+
+    if (!messageList) {
+      return;
+    }
+
+    messageList.scrollTop = messageList.scrollHeight;
+  }, [messages, isLoadingHistory, status]);
 
   const loadConversationMessages = useCallback(
     async (id: string) => {
@@ -233,7 +245,7 @@ export default function ChatPage() {
             </button>
           </div>
         </div>
-        <div className="message-list" aria-live="polite">
+        <div className="message-list" aria-live="polite" ref={messageListRef}>
           {isLoadingHistory ? (
             <div className="empty-chat">
               <p>读取中。</p>
@@ -253,7 +265,7 @@ export default function ChatPage() {
                     <div className="message-actions">
                       <button
                         aria-expanded={openFeedbackMessageId === message.id}
-                        aria-label="消息操作"
+                        aria-label="反馈这条消息"
                         className={`message-menu-trigger ${
                           openFeedbackMessageId === message.id ? "open" : ""
                         }`}
@@ -274,6 +286,9 @@ export default function ChatPage() {
                         role="menu"
                       >
                         <button
+                          className={`message-action-menu-item ${
+                            feedbackByMessage[message.id] === "up" ? "active" : ""
+                          }`}
                           disabled={pendingFeedbackMessageId === message.id}
                           onClick={() => void onFeedback(message.id, "up")}
                           type="button"
@@ -281,6 +296,12 @@ export default function ChatPage() {
                           喜欢
                         </button>
                         <button
+                          className={`message-action-menu-item ${
+                            feedbackByMessage[message.id] === "down" &&
+                            memoryCorrectionMessageId === message.id
+                              ? "active"
+                              : ""
+                          }`}
                           disabled={pendingFeedbackMessageId === message.id}
                           onClick={() => void onFeedback(message.id, "down", "[memory_error]")}
                           type="button"
@@ -288,6 +309,7 @@ export default function ChatPage() {
                           记错了
                         </button>
                         <button
+                          className="message-action-menu-item"
                           disabled={pendingFeedbackMessageId === message.id}
                           onClick={() =>
                             void onFeedback(message.id, "down", "[persona_mismatch]")

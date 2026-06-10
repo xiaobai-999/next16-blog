@@ -8,6 +8,7 @@ import type {
   Memory,
   Message
 } from "@ai-companion/shared";
+import type { ResponseStrategy } from "../services/response-strategy";
 
 export type AgentTraceStatus = "ok" | "error" | "degraded";
 
@@ -38,14 +39,6 @@ export type RiskResult = {
   urgency: ClassificationRiskUrgency;
   signals: string[];
 };
-
-export type ResponseStrategy =
-  | "normal_companion"
-  | "supportive_listening"
-  | "practical_advice"
-  | "memory_correction"
-  | "safe_completion"
-  | "fallback";
 
 export type PendingAction = {
   // type：等待用户确认或后续恢复的动作类型。

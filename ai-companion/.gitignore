@@ -3,6 +3,7 @@ node_modules
 .playwright-mcp
 .next
 dist
+.hive
 .wrangler
 .dev.vars
 .env

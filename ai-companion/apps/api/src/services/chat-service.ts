@@ -15,10 +15,14 @@ import {
 } from "./conversations";
 import { extractAndStoreMemories } from "./memory-extractor";
 import { classifyUserMessage, type ClassificationOutcome } from "./intent-classifier";
+import { confirmMemory, listMemories, rejectMemory } from "./memories";
 import { createMessage, listRecentModelMessages, uiMessageContent } from "./messages";
 import { createModelLog } from "./model-logs";
 import { getChatModel, getModelProviderInfo } from "./model-provider";
+import { summarizeStrategySelection } from "./response-strategy";
 import { ServiceError } from "./service-error";
+import { buildStrategySystemPrompt } from "./strategy-prompts";
+import { selectResponseStrategy } from "./strategy-router";
 
 /**
  * 读取 UIMessage text part 的文本内容。
@@ -110,18 +114,23 @@ function classificationPatch(outcome: ClassificationOutcome): Partial<AgentState
   };
 }
 
-function applySafetyRoute(systemPrompt: string, classification: ClassificationOutcome["classification"]) {
-  if (classification.riskLevel !== "high" && classification.riskUrgency !== "immediate") {
-    return systemPrompt;
+type PendingConfirmationDecision = "accept" | "reject" | null;
+
+/**
+ * 识别用户是否在自然语言中确认或拒绝当前会话的唯一待确认记忆。
+ *
+ * 这里只允许明确短语触发，避免把普通“可以/不要”误当作全局记忆确认。
+ */
+function pendingConfirmationDecision(text: string): PendingConfirmationDecision {
+  if (/(拒绝|不对|不是|取消|不用|不要保存|别记|删掉)/i.test(text)) {
+    return "reject";
   }
 
-  return `${systemPrompt}
+  if (/(确认|可以保存|可以记|对的|是的|没错)/i.test(text)) {
+    return "accept";
+  }
 
-Safety route:
-- Prioritize user safety, emotional grounding, and immediate support.
-- Do not provide instructions that facilitate self-harm, harm to others, or evasion of safety rules.
-- If there may be immediate danger, encourage contacting local emergency services or trusted nearby people.
-- Do not reveal internal classification labels.`;
+  return null;
 }
 
 /**
@@ -203,6 +212,46 @@ export async function createChatStreamResponse(
     recentMessages: messages
   });
   agentState = reduceAgentState(agentState, classificationPatch(classificationOutcome));
+  // pendingMemories：只读取当前 conversation 产生的待确认记忆，避免跨会话劫持普通短句。
+  const pendingMemories = await listMemories(env.DB, userId, {
+    status: "pending_confirmation",
+    sourceConversationId: conversation.id
+  })
+    .catch((error) => {
+      console.error("Failed to read pending memory confirmations", { traceId, error });
+
+      return [];
+    });
+  const pendingDecision = pendingConfirmationDecision(userMessageContent);
+  // handledPendingConfirmation：复用 V1 confirm/reject API，不在聊天服务里另造记忆写入逻辑。
+  const handledPendingConfirmation =
+    pendingDecision && pendingMemories.length === 1
+      ? await (pendingDecision === "accept"
+          ? confirmMemory(env, userId, pendingMemories[0].id)
+          : rejectMemory(env, userId, pendingMemories[0].id)
+        )
+          .then(() => pendingDecision)
+          .catch((error) => {
+            console.error("Failed to handle pending memory confirmation", {
+              traceId,
+              memoryId: pendingMemories[0].id,
+              pendingDecision,
+              error
+            });
+
+            return null;
+          })
+      : null;
+  const strategyStartedAt = new Date().toISOString();
+  const strategySelection = selectResponseStrategy({
+    classification: classificationOutcome.classification,
+    currentInput: userMessageContent,
+    pendingConfirmationHandled: handledPendingConfirmation !== null
+  });
+  const strategyEndedAt = new Date().toISOString();
+  agentState = reduceAgentState(agentState, {
+    responseStrategy: strategySelection.strategy
+  });
   const classificationSpan = {
     traceId,
     nodeName: "intent_emotion_risk_classifier",
@@ -215,7 +264,30 @@ export async function createChatStreamResponse(
     startedAt: classificationOutcome.startedAt,
     endedAt: classificationOutcome.endedAt
   };
-  const effectiveSystemPrompt = applySafetyRoute(systemPrompt, classificationOutcome.classification);
+  const strategySpan = {
+    traceId,
+    nodeName: "response_strategy_router",
+    status: "ok" as const,
+    model: null,
+    inputSummary: [
+      `intent=${classificationOutcome.classification.intent}`,
+      `confidence=${classificationOutcome.classification.intentConfidence.toFixed(2)}`,
+      `riskLevel=${classificationOutcome.classification.riskLevel}`,
+      `riskType=${classificationOutcome.classification.riskType}`,
+      `riskUrgency=${classificationOutcome.classification.riskUrgency}`,
+      `pendingConfirmations=${pendingMemories.length}`,
+      `handledPendingConfirmation=${handledPendingConfirmation ?? "none"}`
+    ].join(";"),
+    outputSummary: summarizeStrategySelection(strategySelection),
+    errorCode: null,
+    errorMessage: null,
+    startedAt: strategyStartedAt,
+    endedAt: strategyEndedAt
+  };
+  const effectiveSystemPrompt = buildStrategySystemPrompt({
+    baseSystemPrompt: systemPrompt,
+    selection: strategySelection
+  });
 
   const scheduleAgentTrace = (input: {
     status: AgentTraceStatus;
@@ -247,10 +319,11 @@ export async function createChatStreamResponse(
           companionId: companion.id,
           conversationId: conversation.id,
           threadId,
-          graphPath: ["intent_emotion_risk_classifier", "v1_chat_stream"],
+          graphPath: ["intent_emotion_risk_classifier", "response_strategy_router", "v1_chat_stream"],
           intent: agentState.classification?.intent ?? null,
           emotion: agentState.classification?.emotion ?? null,
           riskLevel: agentState.classification?.riskLevel ?? null,
+          strategy: agentState.responseStrategy ?? null,
           status,
           degradedReason,
           startedAt: agentStartedAt,
@@ -258,6 +331,7 @@ export async function createChatStreamResponse(
         },
         spans: [
           classificationSpan,
+          strategySpan,
           {
             traceId,
             nodeName: "v1_chat_stream",
@@ -369,7 +443,8 @@ export async function createChatStreamResponse(
     headers: {
       "X-Conversation-Id": conversation.id,
       "X-Trace-Id": traceId,
-      "X-Request-Id": requestId
+      "X-Request-Id": requestId,
+      "X-Response-Strategy": strategySelection.strategy
     },
     originalMessages,
     async onFinish(event) {
@@ -406,22 +481,24 @@ export async function createChatStreamResponse(
         });
         await touchConversation(env.DB, userId, conversation.id);
 
-        const memoryExtraction = extractAndStoreMemories(env, {
-          traceId,
-          userId,
-          conversationId: conversation.id,
-          companionId: conversation.companionId,
-          sourceMessageId: userMessage.id,
-          userMessage: userMessage.content,
-          assistantMessage: assistantMessage.content
-        }).catch((error) => {
-          console.error("Failed to extract memories", { traceId, error });
-        });
+        if (strategySelection.strategy !== "safety_response") {
+          const memoryExtraction = extractAndStoreMemories(env, {
+            traceId,
+            userId,
+            conversationId: conversation.id,
+            companionId: conversation.companionId,
+            sourceMessageId: userMessage.id,
+            userMessage: userMessage.content,
+            assistantMessage: assistantMessage.content
+          }).catch((error) => {
+            console.error("Failed to extract memories", { traceId, error });
+          });
 
-        if (waitUntil) {
-          waitUntil(memoryExtraction);
-        } else {
-          void memoryExtraction;
+          if (waitUntil) {
+            waitUntil(memoryExtraction);
+          } else {
+            void memoryExtraction;
+          }
         }
 
         scheduleAgentTrace({
